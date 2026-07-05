@@ -1,4 +1,5 @@
 import { getQuizById, scoreQuiz, type Answer } from "@quiz/core";
+import { recordAttempt } from "@/lib/attempts";
 
 function isValidAnswers(value: unknown): value is Answer[] {
   return (
@@ -39,5 +40,8 @@ export async function POST(
     );
   }
 
-  return Response.json(scoreQuiz(quiz, answers));
+  const result = scoreQuiz(quiz, answers);
+  const attempt = await recordAttempt(result);
+
+  return Response.json({ ...result, attemptId: attempt.id, createdAt: attempt.createdAt });
 }
