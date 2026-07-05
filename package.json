@@ -10,5 +10,8 @@
     "build": "npm run build --workspace=web",
     "dev": "npm run dev --workspace=web",
     "typecheck": "npm run typecheck --workspace=@quiz/core && npm run typecheck --workspace=web"
+  },
+  "overrides": {
+    "@types/node": "^20"
   }
 }

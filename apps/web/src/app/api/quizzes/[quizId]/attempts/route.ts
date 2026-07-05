@@ -1,6 +1,6 @@
-import { getQuizById } from "@quiz/core";
 import { listRecentAttempts } from "@/lib/attempts";
 import { getClientKey, isRateLimited } from "@/lib/rateLimit";
+import { getQuizById } from "@/lib/quizzes";
 
 export async function GET(
   request: Request,
@@ -11,7 +11,7 @@ export async function GET(
   }
 
   const { quizId } = await params;
-  const quiz = getQuizById(quizId);
+  const quiz = await getQuizById(quizId);
 
   if (!quiz) {
     return Response.json({ error: "Quiz not found" }, { status: 404 });

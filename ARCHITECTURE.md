@@ -5,8 +5,9 @@
 This is an npm-workspaces monorepo:
 
 - `packages/quiz-core` — framework-agnostic TypeScript library: quiz domain
-  types, scoring, and the quiz-taking state machine. No React, no DOM, no
-  fetch. Pure logic, unit tested with Vitest.
+  types, scoring, the quiz-taking state machine, and the Excel-row-to-`Quiz`
+  validation logic (`quizImport.ts`) used by the admin upload flow. No React,
+  no DOM, no fetch, no Prisma. Pure logic, unit tested with Vitest.
 - `apps/web` — Next.js (App Router) web app. Thin UI layer that imports
   `@quiz/core` for all quiz-taking logic; components only manage rendering
   and local UI state. Talks to its own backend via `apps/web/src/app/api/*`
@@ -49,13 +50,18 @@ This matters beyond "clean architecture": a Server Component that imports
 component would serialize `correctOptionId` into the browser bundle. Route
 Handlers plus `toPublicQuiz()` are the boundary that prevents that leak — if
 you add new quiz-related UI, fetch through the API rather than importing
-`Quiz`/`sampleQuiz` into anything that renders on the client.
+quiz data into anything that renders on the client. `@quiz/core` no longer
+exports a quiz *lookup* at all (see below) specifically to close off that
+temptation — there's no `sampleQuiz`/`getQuizById` to reach for from a
+component; the only path to quiz content is through the API.
 
-Quiz *content* is still backed by `packages/quiz-core/src/quizzes.ts`, an
-in-memory `Map` of fixed quizzes (currently just the sample). Swapping that
-for a database lookup later doesn't change the route handlers' shape — same
-request/response contract, same `@quiz/core` types. Quiz *attempts*, on the
-other hand, are already in Postgres (see below) — content and attempts are
+Quiz *content* lives in Postgres (`Quiz`/`Question`/`Option` tables — see
+Database below) and is populated by the admin Excel upload (see
+"Admin / content management" below), not by fixed TypeScript data.
+`apps/web/src/lib/quizzes.ts` reads it and maps rows onto `@quiz/core`'s
+`Quiz` type; route handlers are unchanged by this — same request/response
+contract, same `@quiz/core` types — only where the `Quiz` comes from
+differs. Quiz *attempts* were already in Postgres — content and attempts are
 independent axes and were migrated one at a time.
 
 ## Database
@@ -76,14 +82,25 @@ independent axes and were migrated one at a time.
     workspace's `postinstall` script, so a fresh checkout doesn't need a
     manual `prisma generate` step (though it does need `DATABASE_URL` set
     and migrations applied before the app can actually query the DB).
-- Schema: `apps/web/prisma/schema.prisma` — `QuizAttempt` (quizId, submitted
-  answers as JSON, score fields, `createdAt`, optional `userId`) plus the
-  standard Auth.js models (`User`, `Account`, `Session`,
-  `VerificationToken`, see Authentication below). Migrations are committed
-  under `apps/web/prisma/migrations/`.
-- `apps/web/src/lib/attempts.ts` wraps the two Prisma calls the app needs
-  (`recordAttempt`, `listRecentAttempts`) — this is the only place that
-  should import the Prisma client outside of `db.ts`.
+- Schema: `apps/web/prisma/schema.prisma` —
+  - `Quiz` / `Question` / `Option`: quiz content. `Question.correctOptionId`
+    and `Answer.selectedOptionId` (in `quiz-core`) both reference
+    `Option.value` — a per-question letter (`"a"`-`"d"`) set at import time —
+    **not** `Option.id` (the Prisma-generated row id). This lets a single
+    nested `prisma.quiz.create({ data: { questions: { create: [...] } } })`
+    set `correctOptionId` in the same call, without a two-step write to learn
+    generated option ids first.
+  - `QuizAttempt` (quizId, submitted answers as JSON, score fields,
+    `createdAt`, optional `userId`), with an `onDelete: Cascade` relation to
+    `Quiz` — deleting a quiz deletes its attempts.
+  - The standard Auth.js models (`User`, `Account`, `Session`,
+    `VerificationToken`, see Authentication below).
+  - Migrations are committed under `apps/web/prisma/migrations/`.
+- `apps/web/src/lib/quizzes.ts` (read: `getQuizById`, `listQuizzes`) and
+  `apps/web/src/lib/quizAdmin.ts` (write: `createQuiz`, `deleteQuiz`) map
+  between Prisma rows and `@quiz/core`'s `Quiz` type — these, plus
+  `apps/web/src/lib/attempts.ts` (`recordAttempt`, `listRecentAttempts`), are
+  the only places that should import the Prisma client outside of `db.ts`.
 - **Local setup**: Postgres must be running (`service postgresql start` in
   this sandbox) with a database + role matching `apps/web/.env`'s
   `DATABASE_URL` (see `apps/web/.env.example` for the shape). Run
@@ -147,14 +164,77 @@ request.
    automatically outside of `NODE_ENV=production` or on Vercel/Cloudflare
    Pages.
 
+## Admin / content management
+
+Quizzes are authored by uploading an `.xlsx` file through `/admin`, gated by
+a single shared password — deliberately **not** the Google/Facebook OAuth
+above. That login is end-user-facing and (per the previous section) isn't
+functional until real OAuth credentials are supplied; the admin login needed
+to work immediately, so it's a separate, simpler mechanism:
+
+- Set `ADMIN_SECRET` (any environment) — generate with
+  `openssl rand -base64 24`. There is no username, no per-admin accounts, no
+  link to the `User` table — just one shared password gating `/admin` and
+  `/api/admin/*`.
+- `apps/web/src/lib/adminAuth.ts` — `verifyAdminPassword()` compares the
+  submitted password to `ADMIN_SECRET` with `crypto.timingSafeEqual`.
+  `createAdminSessionToken()`/`isValidAdminSessionToken()` implement a
+  stateless signed cookie (`payload.hmac`, HMAC-SHA256 keyed by
+  `ADMIN_SECRET`, 12h TTL) — there's no server-side session store, so
+  "logout" (`POST /api/admin/logout`) only clears the browser's cookie; a
+  copied cookie value stays valid until it expires. `isAdminRequest()` reads
+  and validates that cookie from `next/headers`' `cookies()`.
+- `POST /api/admin/login` verifies the password, sets the cookie, and is
+  rate-limited (5/min/IP via `rateLimit.ts`) to slow down brute-forcing
+  `ADMIN_SECRET`.
+- `apps/web/src/app/admin/page.tsx` is the only protected page — a Server
+  Component that calls `isAdminRequest()` and `redirect()`s to
+  `/admin/login` if it fails. Per the Next.js 16 docs' own guidance (see
+  `proxy.ts`'s file-convention reference), this checks auth **inside** the
+  page/route rather than relying on a `proxy.ts` gate, since a matcher change
+  could silently stop covering a route.
+- `POST /api/admin/quizzes` accepts `multipart/form-data`
+  (`title`, `description?`, `file`), parses the workbook with
+  `apps/web/src/lib/parseQuizWorkbook.ts` (using `exceljs`, not the
+  `xlsx`/SheetJS npm package — that package's last npm release has known
+  unpatched CVEs), and validates+builds the `Quiz` with `quiz-core`'s
+  `buildQuizFromRows()` before persisting via `quizAdmin.createQuiz()`.
+  Capped at 2MB. Validation errors come back as
+  `{ error, details: QuizImportError[] }` with 1-based row numbers so the
+  admin UI can point at the offending spreadsheet row.
+- `GET /api/admin/template` streams a generated `.xlsx` with the expected
+  header row and one example question — avoids committing a binary fixture
+  to the repo.
+- `DELETE /api/admin/quizzes/[quizId]` removes a quiz (cascades to its
+  questions/options/attempts).
+
+### Excel format
+
+One sheet, one header row, one question per row:
+
+| Question | Option A | Option B | Option C | Option D | Correct Answer | Points |
+| -------- | -------- | -------- | -------- | -------- | --------------- | ------ |
+| What is the capital of France? | Paris | Berlin | Madrid | Rome | A | 1 |
+
+- Exactly 4 options per question (this is a fixed 4-option multiple-choice
+  format, not N-option) — a blank option cell fails that row.
+- `Correct Answer` is the letter `A`-`D` (case-insensitive), not the option
+  text.
+- `Points` is optional and defaults to 1; fractional values are rounded.
+- Column headers are matched case-insensitively; column *order* doesn't
+  matter, only the header text does.
+
 ## Current assumptions (revisit as the product needs change)
 
-- **Content is fixed, not user-authored.** Quizzes are TypeScript data (see
-  `packages/quiz-core/src/sampleQuiz.ts` + `quizzes.ts`), not stored in a
-  database or editable through an admin UI. When quizzes need to be created
-  dynamically, replace `quizzes.ts`'s in-memory map with a database-backed
-  lookup (a `Quiz`/`Question`/`Option` schema in Prisma) — the API routes
-  and `quiz-core` logic don't need to change.
+- **One shared admin password, no audit trail.** There's no per-admin
+  identity, no record of who uploaded/deleted which quiz, and no way to
+  revoke a single admin's access without rotating `ADMIN_SECRET` for
+  everyone. Fine for one operator; revisit before handing multiple people
+  admin access.
+- **No quiz editing.** Uploading is create-only; fixing a typo means
+  deleting the quiz and re-uploading a corrected spreadsheet, which also
+  cascade-deletes that quiz's existing `QuizAttempt` rows — there's no way
+  to fix a typo without losing its attempt history.
 - **Accounts exist but are optional.** Quiz-taking and attempt persistence
   both work without logging in; login only attaches a `userId` to future
   attempts. There's no "my history" page yet that reads attempts back out

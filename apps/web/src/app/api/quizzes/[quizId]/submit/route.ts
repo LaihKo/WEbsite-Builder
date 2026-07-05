@@ -1,7 +1,8 @@
-import { getQuizById, scoreQuiz, type Answer } from "@quiz/core";
+import { scoreQuiz, type Answer } from "@quiz/core";
 import { auth } from "@/auth";
 import { recordAttempt } from "@/lib/attempts";
 import { getClientKey, isRateLimited } from "@/lib/rateLimit";
+import { getQuizById } from "@/lib/quizzes";
 
 function isValidAnswers(value: unknown, maxLength: number): value is Answer[] {
   return (
@@ -26,7 +27,7 @@ export async function POST(
   }
 
   const { quizId } = await params;
-  const quiz = getQuizById(quizId);
+  const quiz = await getQuizById(quizId);
 
   if (!quiz) {
     return Response.json({ error: "Quiz not found" }, { status: 404 });

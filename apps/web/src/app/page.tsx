@@ -1,20 +1,31 @@
 import Link from "next/link";
-import { sampleQuiz } from "@quiz/core";
+import { listQuizzes } from "@/lib/quizzes";
 
-export default function Home() {
+export default async function Home() {
+  const quizzes = await listQuizzes();
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-6 text-center">
       <h1 className="text-4xl font-semibold tracking-tight">Quiz Platform</h1>
-      <p className="max-w-md text-zinc-600 dark:text-zinc-400">
-        A starting point for the quiz app. Try the sample quiz below to see the
-        engine working end to end.
-      </p>
-      <Link
-        href="/quiz"
-        className="rounded-full bg-foreground px-6 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-      >
-        Take the &ldquo;{sampleQuiz.title}&rdquo; quiz
-      </Link>
+      {quizzes.length === 0 ? (
+        <p className="max-w-md text-zinc-600 dark:text-zinc-400">
+          No quizzes have been published yet — check back soon.
+        </p>
+      ) : (
+        <ul className="flex w-full max-w-md flex-col gap-3">
+          {quizzes.map((quiz) => (
+            <li key={quiz.id}>
+              <Link
+                href={`/quiz/${quiz.id}`}
+                className="flex flex-col rounded-lg border border-black/[.08] px-5 py-3 text-left transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+              >
+                <span className="font-medium">{quiz.title}</span>
+                <span className="text-sm text-zinc-500">{quiz.questionCount} questions</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
