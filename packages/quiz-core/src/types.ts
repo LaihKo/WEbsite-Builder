@@ -18,6 +18,15 @@ export interface Quiz {
   questions: Question[];
 }
 
+export type PublicQuestion = Omit<Question, "correctOptionId">;
+
+export interface PublicQuiz {
+  id: string;
+  title: string;
+  description?: string;
+  questions: PublicQuestion[];
+}
+
 export interface Answer {
   questionId: string;
   selectedOptionId: string;

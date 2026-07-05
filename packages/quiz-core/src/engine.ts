@@ -1,7 +1,12 @@
 import type { Quiz, QuizResult, QuizState } from "./types";
 import { scoreQuiz } from "./scoring";
 
-export function createQuizState(quiz: Quiz): QuizState {
+interface NavigableQuiz {
+  id: string;
+  questions: { id: string }[];
+}
+
+export function createQuizState<T extends NavigableQuiz>(quiz: T): QuizState {
   if (quiz.questions.length === 0) {
     throw new Error(`Quiz "${quiz.id}" has no questions`);
   }
@@ -13,13 +18,16 @@ export function createQuizState(quiz: Quiz): QuizState {
   };
 }
 
-export function getCurrentQuestion(state: QuizState, quiz: Quiz) {
+export function getCurrentQuestion<T extends NavigableQuiz>(
+  state: QuizState,
+  quiz: T,
+): T["questions"][number] | null {
   return quiz.questions[state.currentIndex] ?? null;
 }
 
-export function answerCurrentQuestion(
+export function answerCurrentQuestion<T extends NavigableQuiz>(
   state: QuizState,
-  quiz: Quiz,
+  quiz: T,
   selectedOptionId: string,
 ): QuizState {
   if (state.status === "completed") {
@@ -37,7 +45,7 @@ export function answerCurrentQuestion(
   return { ...state, answers };
 }
 
-export function advance(state: QuizState, quiz: Quiz): QuizState {
+export function advance<T extends NavigableQuiz>(state: QuizState, quiz: T): QuizState {
   const nextIndex = state.currentIndex + 1;
   const isLast = nextIndex >= quiz.questions.length;
 

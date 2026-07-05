@@ -9,35 +9,50 @@ This is an npm-workspaces monorepo:
   fetch. Pure logic, unit tested with Vitest.
 - `apps/web` — Next.js (App Router) web app. Thin UI layer that imports
   `@quiz/core` for all quiz-taking logic; components only manage rendering
-  and local UI state.
+  and local UI state. Talks to its own backend via `apps/web/src/app/api/*`
+  Route Handlers rather than importing quiz data directly into client code.
 
 The point of this split: when a native app (React Native/Expo) is added
-later, it becomes a second consumer of `@quiz/core` and of the same backend
+later, it becomes a second consumer of `@quiz/core` and of the same HTTP
 API — not a rewrite of the quiz logic. Keep any new business logic (scoring
 variants, quiz validation, timers, streaks, etc.) in `quiz-core`, not inside
 web components.
 
+## API
+
+- `GET /api/quizzes/[quizId]` — returns a `PublicQuiz` (quiz + questions +
+  options, **without** `correctOptionId`). The client only ever sees this
+  shape; `apps/web/src/components/QuizPlayer.tsx` fetches it and drives the
+  quiz-taking state machine (`createQuizState`/`answerCurrentQuestion`/
+  `advance` from `quiz-core`) against it entirely client-side.
+- `POST /api/quizzes/[quizId]/submit` — body `{ answers: Answer[] }`, scores
+  server-side with `scoreQuiz` (which has the real `Quiz` with answer keys)
+  and returns a `QuizResult`. Scoring never happens on the client.
+
+This matters beyond "clean architecture": a Server Component that imports
+`quiz-core`'s `Quiz` type directly and hands it as a prop to a `"use client"`
+component would serialize `correctOptionId` into the browser bundle. Route
+Handlers plus `toPublicQuiz()` are the boundary that prevents that leak — if
+you add new quiz-related UI, fetch through the API rather than importing
+`Quiz`/`sampleQuiz` into anything that renders on the client.
+
+Both routes are backed by `packages/quiz-core/src/quizzes.ts`, an in-memory
+`Map` of fixed quizzes (currently just the sample). Swapping that for a
+database lookup later doesn't change the route handlers' shape — same
+request/response contract, same `@quiz/core` types.
+
 ## Current assumptions (revisit as the product needs change)
 
-- **Content is fixed, not user-authored.** Quizzes are TypeScript/JSON data
-  (see `packages/quiz-core/src/sampleQuiz.ts`), not stored in a database or
-  editable through an admin UI. This was the fastest path to a working app.
-  When quizzes need to be created dynamically, add a backend API + database
-  and have `quiz-core` consume `Quiz` objects from either source — the
-  scoring/engine code doesn't care where a `Quiz` came from.
+- **Content is fixed, not user-authored.** Quizzes are TypeScript data (see
+  `packages/quiz-core/src/sampleQuiz.ts` + `quizzes.ts`), not stored in a
+  database or editable through an admin UI. When quizzes need to be created
+  dynamically, replace `quizzes.ts`'s in-memory map with a database-backed
+  lookup — the API routes and `quiz-core` logic don't need to change.
 - **No accounts yet.** Quiz-taking is anonymous; results aren't persisted
-  across sessions. Auth and persistence should be layered in without
-  touching `quiz-core`'s pure functions — wrap them in a data layer in
-  `apps/web` (or a shared API client package) instead.
-
-## Adding a backend later
-
-When you need persistence (saved scores, user-authored quizzes, accounts),
-introduce an API rather than talking to a database directly from the UI.
-Next.js Route Handlers under `apps/web/src/app/api/*` work for the web app
-alone; if/when the native app arrives, both clients should call the same
-HTTP API so logic isn't duplicated. `@quiz/core` types (`Quiz`, `Answer`,
-`QuizResult`) are meant to double as the API's request/response shapes.
+  across sessions — `POST /submit` just returns a score, it doesn't store
+  it. Auth and persistence should be layered in without touching
+  `quiz-core`'s pure functions — extend the submit route (or add a new one)
+  to write to a database once accounts exist.
 
 ## Testing
 

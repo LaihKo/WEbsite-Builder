@@ -1,21 +1,92 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   advance,
   answerCurrentQuestion,
   createQuizState,
   getCurrentQuestion,
-  getResult,
-  type Quiz,
+  type Answer,
+  type PublicQuiz,
+  type QuizResult,
+  type QuizState,
 } from "@quiz/core";
 
-export function QuizPlayer({ quiz }: { quiz: Quiz }) {
-  const [state, setState] = useState(() => createQuizState(quiz));
+export function QuizPlayer({ quizId }: { quizId: string }) {
+  const [quiz, setQuiz] = useState<PublicQuiz | null>(null);
+  const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [result, setResult] = useState<QuizResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (state.status === "completed") {
-    const result = getResult(state, quiz);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/quizzes/${quizId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load quiz (${res.status})`);
+        return res.json();
+      })
+      .then((data: PublicQuiz) => {
+        if (cancelled) return;
+        setQuiz(data);
+        setQuizState(createQuizState(data));
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [quizId]);
+
+  async function submitAnswers(answers: Answer[]) {
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/quizzes/${quizId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+      if (!res.ok) throw new Error(`Failed to score quiz (${res.status})`);
+      setResult(await res.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to score quiz");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleSubmit() {
+    if (!selectedOptionId || !quiz || !quizState) return;
+    const answered = answerCurrentQuestion(quizState, quiz, selectedOptionId);
+    const isLastQuestion = quizState.currentIndex + 1 >= quiz.questions.length;
+    setQuizState(advance(answered, quiz));
+    setSelectedOptionId(null);
+    if (isLastQuestion) {
+      void submitAnswers(answered.answers);
+    }
+  }
+
+  function handleRetry() {
+    if (!quiz) return;
+    setQuizState(createQuizState(quiz));
+    setSelectedOptionId(null);
+    setResult(null);
+  }
+
+  if (error) {
+    return <p className="text-red-600 dark:text-red-400">{error}</p>;
+  }
+
+  if (!quiz || !quizState) {
+    return <p className="text-zinc-500">Loading quiz…</p>;
+  }
+
+  if (quizState.status === "completed") {
+    if (submitting || !result) {
+      return <p className="text-zinc-500">Scoring…</p>;
+    }
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <h2 className="text-2xl font-semibold">Quiz complete</h2>
@@ -25,10 +96,7 @@ export function QuizPlayer({ quiz }: { quiz: Quiz }) {
         </p>
         <button
           className="rounded-full border border-black/[.08] px-5 py-2 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
-          onClick={() => {
-            setState(createQuizState(quiz));
-            setSelectedOptionId(null);
-          }}
+          onClick={handleRetry}
         >
           Try again
         </button>
@@ -36,17 +104,10 @@ export function QuizPlayer({ quiz }: { quiz: Quiz }) {
     );
   }
 
-  const question = getCurrentQuestion(state, quiz);
+  const question = getCurrentQuestion(quizState, quiz);
   if (!question) return null;
 
-  const questionNumber = state.currentIndex + 1;
-
-  function handleSubmit() {
-    if (!selectedOptionId) return;
-    const answered = answerCurrentQuestion(state, quiz, selectedOptionId);
-    setState(advance(answered, quiz));
-    setSelectedOptionId(null);
-  }
+  const questionNumber = quizState.currentIndex + 1;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
