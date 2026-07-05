@@ -65,9 +65,11 @@ independent axes and were migrated one at a time.
     workspace's `postinstall` script, so a fresh checkout doesn't need a
     manual `prisma generate` step (though it does need `DATABASE_URL` set
     and migrations applied before the app can actually query the DB).
-- Schema: `apps/web/prisma/schema.prisma`, currently one model —
-  `QuizAttempt` (quizId, submitted answers as JSON, score fields,
-  `createdAt`). Migrations are committed under `apps/web/prisma/migrations/`.
+- Schema: `apps/web/prisma/schema.prisma` — `QuizAttempt` (quizId, submitted
+  answers as JSON, score fields, `createdAt`, optional `userId`) plus the
+  standard Auth.js models (`User`, `Account`, `Session`,
+  `VerificationToken`, see Authentication below). Migrations are committed
+  under `apps/web/prisma/migrations/`.
 - `apps/web/src/lib/attempts.ts` wraps the two Prisma calls the app needs
   (`recordAttempt`, `listRecentAttempts`) — this is the only place that
   should import the Prisma client outside of `db.ts`.
@@ -82,6 +84,58 @@ independent axes and were migrated one at a time.
   ephemeral/read-only filesystems (e.g. Vercel) — worth remembering before
   reaching for "just use SQLite, it's simpler" later.
 
+## Authentication
+
+Auth.js (`next-auth@5`, still in beta but the correct choice for App Router —
+the `4.x` `latest` npm tag is the older pages-router-oriented API) with the
+`@auth/prisma-adapter`, configured for Google and Facebook OAuth.
+
+- `apps/web/src/auth.ts` — the single source of truth. Exports
+  `{ handlers, auth, signIn, signOut }`. `auth()` is an async function
+  callable from Server Components and Route Handlers to get the current
+  session (or `null`).
+- `apps/web/src/app/api/auth/[...nextauth]/route.ts` — re-exports
+  `handlers.GET`/`POST`; this is what OAuth callbacks hit.
+- `apps/web/src/components/AuthStatus.tsx` — a Server Component rendered in
+  the root layout's header on every page. Renders sign-in buttons or
+  "signed in as X + sign out", using `<form action={...}>` with an inline
+  server action (`"use server"`) calling `signIn("google")`/`signOut()` —
+  no client-side `SessionProvider`/`useSession` needed for this simple case.
+- Sessions use the **database** strategy (rows in the `Session` table), not
+  JWT — consistent with everything else in this app being server-verified.
+- `POST /api/quizzes/[quizId]/submit` calls `auth()` and passes
+  `session?.user?.id` into `recordAttempt`, so attempts are tied to a user
+  when logged in and remain anonymous (`userId: null`) otherwise. Taking a
+  quiz does **not** require logging in.
+- `Session.user.id` isn't in Auth.js's default session shape — `auth.ts`
+  adds a `session` callback to attach it and a `declare module "next-auth"`
+  augmentation so it's typed.
+
+### Required setup (not done yet — needs your OAuth accounts)
+
+The code is fully wired, but **the login buttons will not work** until real
+OAuth credentials are supplied — this can't be done by an agent since it
+requires your own Google/Meta developer accounts. Without these env vars
+set, everything else in the app (build, quiz-taking, anonymous attempts)
+still works fine; only the sign-in buttons redirect to a broken OAuth
+request.
+
+1. Set `AUTH_SECRET` (any environment): generate with
+   `openssl rand -base64 32` or `npx auth secret`.
+2. **Google**: [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   → create an OAuth 2.0 Client ID (type "Web application") → add an
+   authorized redirect URI of `{origin}/api/auth/callback/google` (e.g.
+   `http://localhost:3000/api/auth/callback/google` for local dev) → set
+   `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
+3. **Facebook**: [Meta for Developers](https://developers.facebook.com/apps/)
+   → create an app → add the "Facebook Login" product → set a valid OAuth
+   redirect URI of `{origin}/api/auth/callback/facebook` → set
+   `AUTH_FACEBOOK_ID` / `AUTH_FACEBOOK_SECRET`.
+4. In production, also set `AUTH_URL` (or `AUTH_TRUST_HOST=true` if behind a
+   reverse proxy) — without it, Auth.js's host-trust default only applies
+   automatically outside of `NODE_ENV=production` or on Vercel/Cloudflare
+   Pages.
+
 ## Current assumptions (revisit as the product needs change)
 
 - **Content is fixed, not user-authored.** Quizzes are TypeScript data (see
@@ -90,10 +144,10 @@ independent axes and were migrated one at a time.
   dynamically, replace `quizzes.ts`'s in-memory map with a database-backed
   lookup (a `Quiz`/`Question`/`Option` schema in Prisma) — the API routes
   and `quiz-core` logic don't need to change.
-- **No accounts yet.** Quiz-taking is anonymous; attempts are persisted
-  (see above) but aren't tied to a user. When accounts exist, add a
-  `userId` column to `QuizAttempt` and populate it in the submit route —
-  the scoring/engine code in `quiz-core` still doesn't need to change.
+- **Accounts exist but are optional.** Quiz-taking and attempt persistence
+  both work without logging in; login only attaches a `userId` to future
+  attempts. There's no "my history" page yet that reads attempts back out
+  by user — `listRecentAttempts` is still scoped by quiz, not by user.
 
 ## Testing
 
