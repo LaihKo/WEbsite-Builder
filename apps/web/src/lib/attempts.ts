@@ -21,5 +21,14 @@ export function listRecentAttempts(quizId: string, limit = 10) {
     where: { quizId },
     orderBy: { createdAt: "desc" },
     take: limit,
+    // This endpoint is unauthenticated and public — select only the fields
+    // the results UI renders, not the raw row (which includes userId).
+    select: {
+      id: true,
+      correctCount: true,
+      totalQuestions: true,
+      percentage: true,
+      createdAt: true,
+    },
   });
 }

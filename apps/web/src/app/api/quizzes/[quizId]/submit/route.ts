@@ -1,10 +1,12 @@
 import { getQuizById, scoreQuiz, type Answer } from "@quiz/core";
 import { auth } from "@/auth";
 import { recordAttempt } from "@/lib/attempts";
+import { getClientKey, isRateLimited } from "@/lib/rateLimit";
 
-function isValidAnswers(value: unknown): value is Answer[] {
+function isValidAnswers(value: unknown, maxLength: number): value is Answer[] {
   return (
     Array.isArray(value) &&
+    value.length <= maxLength &&
     value.every(
       (item) =>
         typeof item === "object" &&
@@ -19,6 +21,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ quizId: string }> },
 ) {
+  if (isRateLimited(`submit:${getClientKey(request)}`, 10)) {
+    return Response.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const { quizId } = await params;
   const quiz = getQuizById(quizId);
 
@@ -34,9 +40,11 @@ export async function POST(
   }
 
   const answers = (body as { answers?: unknown } | null)?.answers;
-  if (!isValidAnswers(answers)) {
+  if (!isValidAnswers(answers, quiz.questions.length)) {
     return Response.json(
-      { error: "Body must be { answers: { questionId: string, selectedOptionId: string }[] }" },
+      {
+        error: `Body must be { answers: { questionId: string, selectedOptionId: string }[] } with at most ${quiz.questions.length} entries`,
+      },
       { status: 400 },
     );
   }

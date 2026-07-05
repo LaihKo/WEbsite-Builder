@@ -28,10 +28,21 @@ web components.
 - `POST /api/quizzes/[quizId]/submit` — body `{ answers: Answer[] }`, scores
   server-side with `scoreQuiz` (which has the real `Quiz` with answer keys),
   persists the attempt to Postgres, and returns a `QuizResult` plus
-  `attemptId`/`createdAt`. Scoring never happens on the client.
+  `attemptId`/`createdAt`. Scoring never happens on the client. The
+  `answers` array is capped at the quiz's question count before scoring.
 - `GET /api/quizzes/[quizId]/attempts` — returns the most recent persisted
-  attempts for a quiz (newest first). `QuizPlayer` fetches this after
-  submitting and shows it as a "Recent attempts" list on the results screen.
+  attempts for a quiz (newest first), `select`-ed down to the fields the
+  results UI renders (`id`/`correctCount`/`totalQuestions`/`percentage`/
+  `createdAt`) — this is an unauthenticated endpoint, so it must never
+  return the raw `QuizAttempt` row (which includes `userId`). `QuizPlayer`
+  fetches this after submitting and shows it as a "Recent attempts" list on
+  the results screen.
+- Both of the above are guarded by `apps/web/src/lib/rateLimit.ts`, a
+  per-instance in-memory fixed-window limiter keyed by client IP
+  (`x-forwarded-for`). It resets on deploy/restart and doesn't share state
+  across instances — good enough as a basic abuse guard, not a substitute
+  for a shared store (e.g. Redis) if this ever needs to hold under
+  multi-instance production load.
 
 This matters beyond "clean architecture": a Server Component that imports
 `quiz-core`'s `Quiz` type directly and hands it as a prop to a `"use client"`
