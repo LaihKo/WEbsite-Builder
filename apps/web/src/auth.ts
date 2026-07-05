@@ -13,7 +13,10 @@ declare module "next-auth" {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "database" },
-  providers: [Google, Facebook],
+  providers: [
+    Google({ allowDangerousEmailAccountLinking: true }),
+    Facebook({ allowDangerousEmailAccountLinking: true }),
+  ],
   callbacks: {
     session({ session, user }) {
       return { ...session, user: { ...session.user, id: user.id } };
