@@ -207,6 +207,15 @@ to work immediately, so it's a separate, simpler mechanism:
   to the repo.
 - `DELETE /api/admin/quizzes/[quizId]` removes a quiz (cascades to its
   questions/options/attempts).
+- Bulk upload (`AdminQuizManager`'s "Bulk upload" section) is a client-only
+  affordance for uploading many quizzes at once — it takes multiple `.xlsx`
+  files and calls the same `POST /api/admin/quizzes` endpoint once per file
+  sequentially (not a separate batch API route), deriving each quiz's title
+  from its filename. Sequential + one-request-per-file avoids Vercel
+  serverless function timeouts that a single request processing dozens of
+  workbooks server-side could hit, and lets each file succeed or fail
+  independently with its own per-row validation errors shown inline instead
+  of one bad file aborting the whole batch.
 
 ### Excel format
 
