@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQuizFromRows, type QuestionRow } from "../quizImport";
+import { buildQuizFromRows, parseTags, type QuestionRow } from "../quizImport";
 
 function validRow(overrides: Partial<QuestionRow> = {}): QuestionRow {
   return {
@@ -35,9 +35,23 @@ describe("buildQuizFromRows", () => {
       ],
       correctOptionId: "a",
       points: 1,
+      tags: [],
     });
     // lowercase correct-answer letters are accepted
     expect(result.quiz?.questions[1].correctOptionId).toBe("c");
+  });
+
+  it("parses a tags cell into lowercase, deduped, hash-stripped tags", () => {
+    const result = buildQuizFromRows({
+      title: "Q",
+      rows: [validRow({ tags: "#Disney, Movies #movies" })],
+    });
+    expect(result.quiz?.questions[0].tags).toEqual(["disney", "movies"]);
+  });
+
+  it("defaults to no tags when the cell is blank", () => {
+    const result = buildQuizFromRows({ title: "Q", rows: [validRow()] });
+    expect(result.quiz?.questions[0].tags).toEqual([]);
   });
 
   it("defaults points to 1 and rounds fractional points", () => {
@@ -83,5 +97,16 @@ describe("buildQuizFromRows", () => {
       { row: 1, message: "Question text is empty" },
       { row: 2, message: 'Correct answer must be one of A, B, C, D (got "z")' },
     ]);
+  });
+});
+
+describe("parseTags", () => {
+  it("splits on commas and whitespace, strips '#', lowercases, and dedupes", () => {
+    expect(parseTags("#Disney, Movies #movies")).toEqual(["disney", "movies"]);
+  });
+
+  it("returns an empty array for undefined or blank input", () => {
+    expect(parseTags(undefined)).toEqual([]);
+    expect(parseTags("   ")).toEqual([]);
   });
 });

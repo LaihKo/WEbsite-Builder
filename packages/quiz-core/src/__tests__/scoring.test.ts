@@ -15,6 +15,7 @@ const quiz: Quiz = {
       ],
       correctOptionId: "a",
       points: 2,
+      tags: [],
     },
     {
       id: "q2",
@@ -25,6 +26,7 @@ const quiz: Quiz = {
       ],
       correctOptionId: "a",
       points: 1,
+      tags: [],
     },
   ],
 };

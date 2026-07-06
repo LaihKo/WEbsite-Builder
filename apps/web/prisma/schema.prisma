@@ -24,17 +24,20 @@ model Quiz {
 }
 
 model Question {
-  id              String @id @default(cuid())
+  id              String   @id @default(cuid())
   quizId          String
-  quiz            Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quiz            Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
   order           Int
   prompt          String
-  points          Int    @default(1)
+  points          Int      @default(1)
   correctOptionId String
+  // Freeform lowercase labels (no leading "#"), e.g. ["disney", "movies"].
+  tags            String[] @default([])
 
   options Option[]
 
   @@unique([quizId, order])
+  @@index([tags], type: Gin)
 }
 
 model Option {

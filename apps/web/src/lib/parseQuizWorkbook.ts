@@ -9,6 +9,7 @@ const HEADER_MAP: Record<string, keyof QuestionRow> = {
   "option d": "optionD",
   "correct answer": "correctAnswer",
   points: "points",
+  tags: "tags",
 };
 
 export const QUIZ_TEMPLATE_HEADERS = [
@@ -19,6 +20,7 @@ export const QUIZ_TEMPLATE_HEADERS = [
   "Option D",
   "Correct Answer",
   "Points",
+  "Tags",
 ];
 
 export async function parseQuizWorkbook(buffer: Buffer): Promise<QuestionRow[]> {
@@ -67,6 +69,7 @@ export async function parseQuizWorkbook(buffer: Buffer): Promise<QuestionRow[]> 
       optionD: partial.optionD ?? "",
       correctAnswer: partial.correctAnswer ?? "",
       points: partial.points,
+      tags: partial.tags,
     });
   });
 

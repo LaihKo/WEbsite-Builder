@@ -212,15 +212,21 @@ to work immediately, so it's a separate, simpler mechanism:
 
 One sheet, one header row, one question per row:
 
-| Question | Option A | Option B | Option C | Option D | Correct Answer | Points |
-| -------- | -------- | -------- | -------- | -------- | --------------- | ------ |
-| What is the capital of France? | Paris | Berlin | Madrid | Rome | A | 1 |
+| Question | Option A | Option B | Option C | Option D | Correct Answer | Points | Tags |
+| -------- | -------- | -------- | -------- | -------- | --------------- | ------ | ---- |
+| What is the capital of France? | Paris | Berlin | Madrid | Rome | A | 1 | geography, capitals |
 
 - Exactly 4 options per question (this is a fixed 4-option multiple-choice
   format, not N-option) — a blank option cell fails that row.
 - `Correct Answer` is the letter `A`-`D` (case-insensitive), not the option
   text.
 - `Points` is optional and defaults to 1; fractional values are rounded.
+- `Tags` is optional — free-form labels split on commas or whitespace, with
+  any leading `#` stripped and lowercased (`"#Disney, Movies #movies"` and
+  `"disney movies"` both become `["disney", "movies"]`, see
+  `quiz-core`'s `parseTags()`). Stored as a Postgres `String[]` on
+  `Question` (GIN-indexed) — there's no separate `Tag` table, tags are just
+  labels on a question, not a normalized/manageable entity yet.
 - Column headers are matched case-insensitively; column *order* doesn't
   matter, only the header text does.
 

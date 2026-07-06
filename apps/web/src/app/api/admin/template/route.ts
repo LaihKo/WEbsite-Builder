@@ -10,7 +10,16 @@ export async function GET() {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Questions");
   sheet.addRow(QUIZ_TEMPLATE_HEADERS);
-  sheet.addRow(["What is the capital of France?", "Paris", "Berlin", "Madrid", "Rome", "A", 1]);
+  sheet.addRow([
+    "What is the capital of France?",
+    "Paris",
+    "Berlin",
+    "Madrid",
+    "Rome",
+    "A",
+    1,
+    "geography, capitals",
+  ]);
   sheet.getRow(1).font = { bold: true };
   sheet.columns.forEach((column) => {
     column.width = 24;

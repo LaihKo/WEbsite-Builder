@@ -12,6 +12,7 @@ export async function createQuiz(input: Omit<Quiz, "id">): Promise<Quiz> {
           prompt: question.prompt,
           points: question.points,
           correctOptionId: question.correctOptionId,
+          tags: question.tags,
           options: {
             create: question.options.map((option) => ({
               value: option.id,
@@ -33,6 +34,7 @@ export async function createQuiz(input: Omit<Quiz, "id">): Promise<Quiz> {
       prompt: question.prompt,
       points: question.points,
       correctOptionId: question.correctOptionId,
+      tags: question.tags,
       options: question.options.map((option) => ({ id: option.value, text: option.text })),
     })),
   };

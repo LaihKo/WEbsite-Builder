@@ -9,6 +9,8 @@ export interface Question {
   options: QuestionOption[];
   correctOptionId: string;
   points: number;
+  /** Freeform lowercase labels, e.g. ["disney", "movies"] (no leading "#"). */
+  tags: string[];
 }
 
 export interface Quiz {

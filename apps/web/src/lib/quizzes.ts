@@ -25,6 +25,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
       prompt: question.prompt,
       points: question.points,
       correctOptionId: question.correctOptionId,
+      tags: question.tags,
       options: question.options
         .slice()
         .sort((a, b) => a.value.localeCompare(b.value))

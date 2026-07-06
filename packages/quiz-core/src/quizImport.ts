@@ -11,6 +11,19 @@ export interface QuestionRow {
   optionD: string;
   correctAnswer: string;
   points?: number;
+  /** Raw cell value, e.g. "disney, movies" or "#disney #movies". */
+  tags?: string;
+}
+
+/** Splits a raw tags cell on commas/whitespace, strips "#", lowercases, dedupes. */
+export function parseTags(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  for (const part of raw.split(/[,\s]+/)) {
+    const tag = part.trim().replace(/^#+/, "").toLowerCase();
+    if (tag) seen.add(tag);
+  }
+  return Array.from(seen);
 }
 
 export interface QuizImportInput {
@@ -72,6 +85,7 @@ export function buildQuizFromRows(input: QuizImportInput): QuizImportResult {
       options: options.map((text, i) => ({ id: OPTION_VALUES[i], text: text.trim() })),
       correctOptionId: OPTION_VALUES[letterIndex],
       points,
+      tags: parseTags(row.tags),
     });
   });
 

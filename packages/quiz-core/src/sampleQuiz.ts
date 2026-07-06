@@ -15,6 +15,7 @@ export const sampleQuiz: Quiz = {
       ],
       correctOptionId: "a",
       points: 1,
+      tags: [],
     },
     {
       id: "q2",
@@ -26,6 +27,7 @@ export const sampleQuiz: Quiz = {
       ],
       correctOptionId: "c",
       points: 1,
+      tags: [],
     },
     {
       id: "q3",
@@ -37,6 +39,7 @@ export const sampleQuiz: Quiz = {
       ],
       correctOptionId: "b",
       points: 1,
+      tags: [],
     },
   ],
 };
