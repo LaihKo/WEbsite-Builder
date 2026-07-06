@@ -11,6 +11,37 @@ export interface QuizSummaryView {
   questionCount: number;
 }
 
+interface BulkUploadResult {
+  name: string;
+  status: "success" | "error";
+  message?: string;
+}
+
+function titleFromFilename(filename: string): string {
+  const withoutExtension = filename.replace(/\.xlsx$/i, "");
+  return withoutExtension
+    .replace(/[-_]+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+    .join(" ");
+}
+
+async function uploadQuizFile(file: File, title: string): Promise<{ ok: boolean; message?: string }> {
+  const formData = new FormData();
+  formData.set("title", title);
+  formData.set("description", "");
+  formData.set("file", file);
+
+  const res = await fetch("/api/admin/quizzes", { method: "POST", body: formData });
+  if (res.ok) return { ok: true };
+  const data = await res.json().catch(() => null);
+  const message: string | undefined = data?.details?.length
+    ? data.details.map((d: QuizImportError) => (d.row > 0 ? `Row ${d.row}: ${d.message}` : d.message)).join("; ")
+    : data?.error;
+  return { ok: false, message: message ?? "Upload failed" };
+}
+
 export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSummaryView[] }) {
   const router = useRouter();
   const [quizzes, setQuizzes] = useState(initialQuizzes);
@@ -20,6 +51,11 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<QuizImportError[] | null>(null);
+
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkResults, setBulkResults] = useState<BulkUploadResult[]>([]);
 
   async function handleUpload(event: FormEvent) {
     event.preventDefault();
@@ -50,6 +86,28 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleBulkUpload(event: FormEvent) {
+    event.preventDefault();
+    if (bulkFiles.length === 0) return;
+    setBulkSubmitting(true);
+    setBulkProgress(0);
+    setBulkResults([]);
+
+    const results: BulkUploadResult[] = [];
+    for (const file of bulkFiles) {
+      const { ok, message } = await uploadQuizFile(file, titleFromFilename(file.name));
+      results.push({ name: file.name, status: ok ? "success" : "error", message });
+      setBulkResults([...results]);
+      setBulkProgress(results.length);
+    }
+
+    setBulkFiles([]);
+    setBulkSubmitting(false);
+
+    const listRes = await fetch("/api/admin/quizzes");
+    if (listRes.ok) setQuizzes(await listRes.json());
   }
 
   async function handleDelete(id: string) {
@@ -119,6 +177,48 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
           >
             {submitting ? "Uploading…" : "Upload"}
           </button>
+        </form>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-medium">Bulk upload</h2>
+        <p className="text-sm text-zinc-500">
+          Select multiple .xlsx files at once — each becomes its own quiz, titled after its filename.
+        </p>
+        <form onSubmit={handleBulkUpload} className="flex flex-col gap-3">
+          <input
+            type="file"
+            accept=".xlsx"
+            multiple
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              setBulkFiles(event.target.files ? Array.from(event.target.files) : [])
+            }
+            className="text-sm"
+          />
+          <button
+            type="submit"
+            disabled={bulkSubmitting || bulkFiles.length === 0}
+            className="self-start rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
+          >
+            {bulkSubmitting
+              ? `Uploading ${bulkProgress}/${bulkFiles.length}…`
+              : bulkFiles.length > 0
+                ? `Upload ${bulkFiles.length} quizzes`
+                : "Upload quizzes"}
+          </button>
+          {bulkResults.length > 0 && (
+            <ul className="flex flex-col gap-1 text-sm">
+              {bulkResults.map((result, index) => (
+                <li
+                  key={index}
+                  className={result.status === "success" ? "text-zinc-500" : "text-red-600 dark:text-red-400"}
+                >
+                  {result.status === "success" ? "✓" : "✗"} {result.name}
+                  {result.message ? ` — ${result.message}` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
         </form>
       </section>
 
