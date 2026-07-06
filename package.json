@@ -1,0 +1,17 @@
+{
+  "name": "quiz-platform",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace=@quiz/core",
+    "build": "npm run build --workspace=web",
+    "dev": "npm run dev --workspace=web",
+    "typecheck": "npm run typecheck --workspace=@quiz/core && npm run typecheck --workspace=web"
+  },
+  "overrides": {
+    "@types/node": "^20"
+  }
+}

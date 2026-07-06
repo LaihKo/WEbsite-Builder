@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions Question[]
+  attempts  QuizAttempt[]
+}
+
+model Question {
+  id              String   @id @default(cuid())
+  quizId          String
+  quiz            Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  order           Int
+  prompt          String
+  points          Int      @default(1)
+  correctOptionId String
+  // Freeform lowercase labels (no leading "#"), e.g. ["disney", "movies"].
+  tags            String[] @default([])
+
+  options Option[]
+
+  @@unique([quizId, order])
+  @@index([tags], type: Gin)
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  // Stable per-question identifier ("a"-"d") — this is what quiz-core's
+  // Question.correctOptionId and Answer.selectedOptionId reference, not the
+  // Prisma-generated `id` above.
+  value      String
+  text       String
+
+  @@unique([questionId, value])
+}
+
+model QuizAttempt {
+  id             String   @id @default(cuid())
+  quizId         String
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers        Json
+  correctCount   Int
+  totalQuestions Int
+  scorePoints    Int
+  maxPoints      Int
+  percentage     Int
+  createdAt      DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([quizId, createdAt])
+  @@index([userId])
+}
+
+// Real-time-ish (polling-based) multiplayer "vote on a category" game mode.
+// Draws questions ad hoc from Question.tags across all quizzes, rather than
+// playing one fixed Quiz — deliberately not modeled as a Quiz/QuizAttempt.
+
+model GameSession {
+  id       String @id @default(cuid())
+  code     String @unique
+  // "lobby" | "voting" | "playing" | "completed"
+  status   String @default("lobby")
+  // The 3 tags offered to players during the "voting" phase.
+  categoryChoices String[] @default([])
+  // Winning tag, set once voting resolves.
+  category        String?
+  // Question ids drawn for this session once voting resolves, in play order.
+  questionIds          String[] @default([])
+  currentQuestionIndex Int      @default(0)
+  createdAt            DateTime @default(now())
+
+  players GamePlayer[]
+
+  @@index([createdAt])
+}
+
+model GamePlayer {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // 1-6, assigned at join time.
+  seat      Int
+  name      String
+  votedTag  String?
+  // Answer[]-shaped (quiz-core), appended to as the player answers each
+  // question — scored on read with quiz-core's scoreQuiz() against a
+  // synthetic Quiz built from questionIds, not stored redundantly here.
+  answers   Json        @default("[]")
+  joinedAt  DateTime    @default(now())
+
+  @@unique([sessionId, seat])
+}
+
+// Auth.js (next-auth v5) Prisma adapter schema: https://authjs.dev/getting-started/adapters/prisma
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts     Account[]
+  sessions     Session[]
+  quizAttempts QuizAttempt[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
