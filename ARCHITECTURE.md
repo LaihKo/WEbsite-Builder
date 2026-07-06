@@ -230,6 +230,54 @@ One sheet, one header row, one question per row:
 - Column headers are matched case-insensitively; column *order* doesn't
   matter, only the header text does.
 
+## Party mode (multiplayer category-voting game)
+
+A second, separate way to play, alongside the single-player `/quiz/[quizId]`
+flow: 1-6 players each on their own device join a room, vote once on a
+question category, then all answer the same sequence of questions together.
+This does **not** reuse the `Quiz`/`QuizAttempt` models — it draws questions
+ad hoc across *all* quizzes by tag, so it's a different game shape (a
+temporary, assembled set of questions) rather than "play one fixed Quiz."
+Deliberately kept separate rather than bolted onto `QuizPlayer`/`QuizAttempt`.
+
+- **Real-time is polling, not WebSockets/SSE.** `apps/web/src/components/PartyRoom.tsx`
+  polls `GET /api/games/[code]?playerId=...` every 1.5s. No new
+  infrastructure (no Pusher/Ably/PartyKit, no persistent connections) —
+  simplest thing that works for a handful of players in the same room, at
+  the cost of up to ~1.5s of visible lag on lobby/vote/score updates. Revisit
+  if this needs to feel snappier or scale beyond casual use.
+- **Schema**: `GameSession` (`code`, `status`: `lobby`→`voting`→`playing`→
+  `completed`, `categoryChoices`, `category`, `questionIds`,
+  `currentQuestionIndex`) and `GamePlayer` (`seat` 1-6, `name`, `votedTag`,
+  `answers` as an `Answer[]`-shaped `Json` column — same shape as
+  `QuizAttempt.answers`). No `score` column: a player's score is always
+  *computed* on read by running `quiz-core`'s `scoreQuiz()` against a
+  synthetic `Quiz` built from `questionIds` (`apps/web/src/lib/games.ts`'s
+  `buildQuizFromQuestionIds`), rather than stored and kept in sync.
+- **Category choices**: `listAllTags()` in `games.ts` runs
+  `SELECT DISTINCT unnest(tags) FROM "Question"` — the one raw SQL query in
+  the app, since Prisma's query builder has no equivalent for "distinct
+  values across an array column." No user input is interpolated, so there's
+  no injection surface. 3 random tags are offered; whichever gets the most
+  votes wins (ties broken randomly); up to 8 random questions carrying that
+  tag are drawn to play (fewer if that tag has fewer than 8 questions).
+- **Identity is a bare `playerId` (cuid), not authenticated.** Saved to
+  `localStorage` (`apps/web/src/lib/partyStorage.ts`) so a refresh
+  remembers "which seat is mine" for a given game code. There's no password
+  on it — anyone with the id could act as that player — acceptable for a
+  casual same-room party game, not meant to resist a determined co-player.
+- **Concurrency**: advancing `currentQuestionIndex` (once everyone's
+  answered) and tallying votes (once everyone's voted) both guard their
+  `updateMany` with a `WHERE status = ... AND currentQuestionIndex = ...`
+  condition, so if two players' requests race to trigger the same
+  transition, only one actually applies it.
+- **No cleanup job.** `GameSession`/`GamePlayer` rows accumulate forever;
+  there's no expiry or archival. Fine at low volume, worth adding a sweep
+  before this sees real traffic.
+- **Rate limiting is keyed by game code, not client IP, on the polling
+  endpoint** — up to 6 players on the same wifi/NAT all poll it, so an
+  IP-keyed limit would throttle the whole room instead of guarding one game.
+
 ## Current assumptions (revisit as the product needs change)
 
 - **One shared admin password, no audit trail.** There's no per-admin

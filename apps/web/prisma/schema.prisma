@@ -72,6 +72,46 @@ model QuizAttempt {
   @@index([userId])
 }
 
+// Real-time-ish (polling-based) multiplayer "vote on a category" game mode.
+// Draws questions ad hoc from Question.tags across all quizzes, rather than
+// playing one fixed Quiz — deliberately not modeled as a Quiz/QuizAttempt.
+
+model GameSession {
+  id       String @id @default(cuid())
+  code     String @unique
+  // "lobby" | "voting" | "playing" | "completed"
+  status   String @default("lobby")
+  // The 3 tags offered to players during the "voting" phase.
+  categoryChoices String[] @default([])
+  // Winning tag, set once voting resolves.
+  category        String?
+  // Question ids drawn for this session once voting resolves, in play order.
+  questionIds          String[] @default([])
+  currentQuestionIndex Int      @default(0)
+  createdAt            DateTime @default(now())
+
+  players GamePlayer[]
+
+  @@index([createdAt])
+}
+
+model GamePlayer {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // 1-6, assigned at join time.
+  seat      Int
+  name      String
+  votedTag  String?
+  // Answer[]-shaped (quiz-core), appended to as the player answers each
+  // question — scored on read with quiz-core's scoreQuiz() against a
+  // synthetic Quiz built from questionIds, not stored redundantly here.
+  answers   Json        @default("[]")
+  joinedAt  DateTime    @default(now())
+
+  @@unique([sessionId, seat])
+}
+
 // Auth.js (next-auth v5) Prisma adapter schema: https://authjs.dev/getting-started/adapters/prisma
 
 model User {
