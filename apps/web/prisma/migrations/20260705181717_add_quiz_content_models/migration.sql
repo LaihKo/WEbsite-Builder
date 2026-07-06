@@ -43,5 +43,18 @@ ALTER TABLE "Question" ADD CONSTRAINT "Question_quizId_fkey" FOREIGN KEY ("quizI
 -- AddForeignKey
 ALTER TABLE "Option" ADD CONSTRAINT "Option_questionId_fkey" FOREIGN KEY ("questionId") REFERENCES "Question"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- Backfill: existing deployments have QuizAttempt rows from the old
+-- hardcoded sample quiz, predating the Quiz table. Insert a placeholder
+-- Quiz row for any quizId already referenced by QuizAttempt so the new
+-- foreign key below doesn't reject that historical data.
+INSERT INTO "Quiz" ("id", "title", "description", "updatedAt")
+SELECT DISTINCT
+    qa."quizId",
+    CASE WHEN qa."quizId" = 'geography-basics' THEN 'Geography Basics' ELSE qa."quizId" END,
+    CASE WHEN qa."quizId" = 'geography-basics' THEN 'A short quiz to sanity-check the quiz engine end to end.' ELSE NULL END,
+    CURRENT_TIMESTAMP
+FROM "QuizAttempt" qa
+WHERE NOT EXISTS (SELECT 1 FROM "Quiz" q WHERE q."id" = qa."quizId");
+
 -- AddForeignKey
 ALTER TABLE "QuizAttempt" ADD CONSTRAINT "QuizAttempt_quizId_fkey" FOREIGN KEY ("quizId") REFERENCES "Quiz"("id") ON DELETE CASCADE ON UPDATE CASCADE;
