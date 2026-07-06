@@ -242,12 +242,16 @@ One sheet, one header row, one question per row:
 ## Party mode (multiplayer category-voting game)
 
 A second, separate way to play, alongside the single-player `/quiz/[quizId]`
-flow: 1-6 players each on their own device join a room, vote once on a
-question category, then all answer the same sequence of questions together.
-This does **not** reuse the `Quiz`/`QuizAttempt` models — it draws questions
-ad hoc across *all* quizzes by tag, so it's a different game shape (a
-temporary, assembled set of questions) rather than "play one fixed Quiz."
-Deliberately kept separate rather than bolted onto `QuizPlayer`/`QuizAttempt`.
+flow: 1-6 players each on their own device join a room and play **3 rounds**
+of 5 questions. Each round opens with a vote on 3 random categories; the
+winning category's questions are drawn and played with a 30s-per-question
+timer; a scoreboard is shown between rounds. If 2+ players are tied for the
+top score after the final round, a typed-numeric-guess tiebreaker decides
+the winner. This does **not** reuse the `Quiz`/`QuizAttempt` models — it
+draws questions ad hoc across *all* quizzes by tag, so it's a different game
+shape (a temporary, assembled set of questions) rather than "play one fixed
+Quiz." Deliberately kept separate rather than bolted onto
+`QuizPlayer`/`QuizAttempt`.
 
 - **Real-time is polling, not WebSockets/SSE.** `apps/web/src/components/PartyRoom.tsx`
   polls `GET /api/games/[code]?playerId=...` every 1.5s. No new
@@ -255,30 +259,68 @@ Deliberately kept separate rather than bolted onto `QuizPlayer`/`QuizAttempt`.
   simplest thing that works for a handful of players in the same room, at
   the cost of up to ~1.5s of visible lag on lobby/vote/score updates. Revisit
   if this needs to feel snappier or scale beyond casual use.
-- **Schema**: `GameSession` (`code`, `status`: `lobby`→`voting`→`playing`→
-  `completed`, `categoryChoices`, `category`, `questionIds`,
-  `currentQuestionIndex`) and `GamePlayer` (`seat` 1-6, `name`, `votedTag`,
-  `answers` as an `Answer[]`-shaped `Json` column — same shape as
-  `QuizAttempt.answers`). No `score` column: a player's score is always
-  *computed* on read by running `quiz-core`'s `scoreQuiz()` against a
-  synthetic `Quiz` built from `questionIds` (`apps/web/src/lib/games.ts`'s
-  `buildQuizFromQuestionIds`), rather than stored and kept in sync.
-- **Category choices**: `listAllTags()` in `games.ts` runs
-  `SELECT DISTINCT unnest(tags) FROM "Question"` — the one raw SQL query in
-  the app, since Prisma's query builder has no equivalent for "distinct
-  values across an array column." No user input is interpolated, so there's
-  no injection surface. 3 random tags are offered; whichever gets the most
-  votes wins (ties broken randomly); up to 8 random questions carrying that
-  tag are drawn to play (fewer if that tag has fewer than 8 questions).
+- **Status machine**: `lobby` → (`voting` → `playing`) × 3 rounds →
+  `round-summary` after each round → either back to `voting` for the next
+  round, or (on the final round) `completed` directly, or `tiebreak` →
+  `completed` if the top score is tied.
+- **Schema**: `GameSession` (`code`, `status`, `categoryChoices`, `category`,
+  `questionIds` — grows across rounds rather than resetting, so cumulative
+  scoring stays a single `scoreQuiz()` call — `currentQuestionIndex`,
+  `roundStartIndex` — this round's offset into `questionIds`; not assumed to
+  be `roundIndex * QUESTIONS_PER_ROUND` since a thin category tag can yield
+  fewer than `QUESTIONS_PER_ROUND` questions — `roundIndex`, `usedTags`,
+  `questionStartedAt`, and the tiebreak fields below) and `GamePlayer`
+  (`seat` 1-6, `name`, `votedTag`, `answers` as an `Answer[]`-shaped `Json`
+  column — same shape as `QuizAttempt.answers`). No `score` column: a
+  player's score is always *computed* on read by running `quiz-core`'s
+  `scoreQuiz()` against a synthetic `Quiz` built from `questionIds`
+  (`apps/web/src/lib/games.ts`'s `buildQuizFromQuestionIds`), rather than
+  stored and kept in sync.
+- **Category choices**: `listTagsWithAtLeast(QUESTIONS_PER_ROUND)` in
+  `games.ts` runs a raw `GROUP BY ... HAVING count(*) >= ...` query over
+  `unnest(tags)` — the one raw SQL in the app, since Prisma's query builder
+  has no equivalent for "distinct/grouped values across an array column." No
+  user input is interpolated, so there's no injection surface. Only tags
+  with enough questions to fill a round are offered, and a tag already won
+  earlier in the same game (`usedTags`) is excluded from later rounds so a
+  category doesn't repeat. 3 random (qualifying, unused) tags are offered;
+  whichever gets the most votes wins (ties broken randomly).
+- **Per-question timer**: `questionStartedAt` is stamped when a question is
+  shown; `getGameState()` computes `questionSecondsRemaining` server-side
+  (not by sending a timestamp for the client to diff against — avoids any
+  client/server clock-skew) and the client ticks it down locally between
+  polls, resyncing every poll. If the timer expires before everyone's
+  answered, `getGameState()` itself advances the game as a side effect of
+  being read (the same guarded-`updateMany` pattern as the "everyone
+  answered" path) — in a `while` loop, so if nobody polled for a while
+  (phones locked) it catches up through multiple expired questions in one
+  call rather than getting stuck. This means the timeout doesn't depend on
+  any background job or cron; the next poll from *any* player's device
+  drives it forward.
+- **Tiebreaker**: a separate `TiebreakerQuestion` model (`prompt`, numeric
+  `answer`) — deliberately not part of `quiz-core`'s multiple-choice
+  `Question`/`Option` shape, since these are typed-numeric "closest guess
+  wins" prompts (e.g. "how many standard sized army ants... — reference
+  answer: 141"), managed from `/admin` like quiz content. When 2+ players
+  tie for the top score after round 3, one random `TiebreakerQuestion` is
+  drawn, `GameSession.tiebreakSeats` records the tied seats, and only those
+  seats' `POST /api/games/[code]/tiebreak-answer` calls are accepted —
+  everyone else can see the prompt (and, once resolved, everyone's guesses)
+  but can't submit one. Guesses are hidden from other players until either
+  the viewer has submitted their own or the tiebreak is resolved, so a
+  laggy poller can't copy another player's guess before answering. Same
+  self-healing timeout pattern as the question timer
+  (`TIEBREAK_TIMER_SECONDS`); if nobody guessed before it expires, the
+  winner is picked randomly among the tied seats rather than stalling.
 - **Identity is a bare `playerId` (cuid), not authenticated.** Saved to
   `localStorage` (`apps/web/src/lib/partyStorage.ts`) so a refresh
   remembers "which seat is mine" for a given game code. There's no password
   on it — anyone with the id could act as that player — acceptable for a
   casual same-room party game, not meant to resist a determined co-player.
-- **Concurrency**: advancing `currentQuestionIndex` (once everyone's
-  answered) and tallying votes (once everyone's voted) both guard their
-  `updateMany` with a `WHERE status = ... AND currentQuestionIndex = ...`
-  condition, so if two players' requests race to trigger the same
+- **Concurrency**: every state transition (advancing `currentQuestionIndex`,
+  tallying votes, starting the next round, resolving the tiebreak) guards
+  its `updateMany` with a `WHERE status = ... AND ...` condition matching
+  the state it read, so if two requests race to trigger the same
   transition, only one actually applies it.
 - **No cleanup job.** `GameSession`/`GamePlayer` rows accumulate forever;
   there's no expiry or archival. Fine at low volume, worth adding a sweep
