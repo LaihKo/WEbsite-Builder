@@ -1,0 +1,16 @@
+-- Several "movies" questions were written leaning on "you can still catch
+-- this in cinemas right now" framing from whenever the original quiz was
+-- written -- now that framing no longer disambiguates between several
+-- similar wrong answers (e.g. "our tuxedo-clad hero saves the world and
+-- seduces women" fits James Bond, Kingsman, Mission Impossible, and Spy
+-- equally). Rewords each to identify the correct answer via durable plot,
+-- cast, or franchise detail instead of release timing.
+
+UPDATE "Question" SET "prompt" = 'I hvilken film spiller Scarlett Johansson en kvinde, der efter at være blevet udsat for et syntetisk stof pludselig får uanede mentale evner, med Morgan Freeman som professor i en birolle?' WHERE "prompt" = 'Man kan stadig nå at se Scarlett Johansson og Morgan Freeman sammen i denne futuristiske film, hvor en kvinde pludselig får uanede evner. Hvad hedder filmen?';
+UPDATE "Question" SET "prompt" = 'I hvilken Klokkeblomst-film slår den oprørske støv-fe Zarina sig sammen med pirater, i en historie der fører op til en ung udgave af Kaptajn Klo?' WHERE "prompt" = 'Man kan følge Klokkeblomst endnu en gang i denne Disney-film. Hvad hedder den?';
+UPDATE "Question" SET "prompt" = 'I hvilket filmfranchise finder vi vores tuxedoklædte kvindebedårer med de specielle biler, ure og alt muligt andet gadget-udstyr fra Q?' WHERE "prompt" = 'Man kan endnu nå at se vores tuxedoklædte helt redde verden og forføre kvinder. Hvad hedder filmen?';
+UPDATE "Question" SET "prompt" = 'I denne opfølger tager et hold mandlige strippere på roadtrip til en stor stripper-konvent i Myrtle Beach for én sidste stor forestilling. Hvilken film?' WHERE "prompt" = 'Denne sommerfilm har premiere 2. juli og skulle efter sigende blive større end den første, med varme, lækre og bare overkroppe. Hvilken film?';
+UPDATE "Question" SET "prompt" = 'Ethan og holdet skal i denne film kæmpe mod Syndikatet, en international skurkeorganisation der har sendt deres bedste snigmorder efter dem. Hvilken film?' WHERE "prompt" = 'Ethan og holdet skal i denne film kæmpe mod Syndikatet, en international organisation der har sendt deres bedste agent efter dem. Tom Cruise leverer endnu en superpræstation. Hvilken film?';
+UPDATE "Question" SET "prompt" = 'I hvilken film går Jonah Hill og Channing Tatums karakterer undercover på et universitet i stedet for en high school - filmens egen spøg med at være en dyrere, større sequel til sig selv?' WHERE "prompt" = 'Hvis du triller ind til CinemaxX, kan du i øjeblikket se Jonah Hill og Channing Tatum i hvilken underholdende toer?';
+UPDATE "Question" SET "prompt" = 'Hvilken film fortæller den ufortalte oprindelseshistorie om, hvordan Vlad Palisador blev til Dracula for at redde sit rige fra det osmanniske rige?' WHERE "prompt" = 'Snart kan vi i biografen få den ufortalte historie om en af vor tids største monster-ikoner.';
+UPDATE "Question" SET "prompt" = 'Dukker er satme klamme, og det er bestemt ikke anderledes i denne film om en vintage-dukke, som skaber problemer og som er et spin-off fra The Conjuring-universet. Hvilken film?' WHERE "prompt" = 'Dukker er satme klamme, og det er bestemt ikke anderledes i denne nye film om en vintage-dukke, som skaber problemer. Hvilken film?';
