@@ -82,41 +82,41 @@ model QuizAttempt {
 // playing one fixed Quiz — deliberately not modeled as a Quiz/QuizAttempt.
 
 model GameSession {
-  id                   String    @id @default(cuid())
-  code                 String    @unique
+  id                       String    @id @default(cuid())
+  code                     String    @unique
   // "lobby" | "voting" | "playing" | "round-summary" | "tiebreak" | "completed"
-  status               String    @default("lobby")
+  status                   String    @default("lobby")
   // "regular" | "party" — "party" unlocks the opt-in drinking-game challenge
   // between rounds; set once at creation, fixed for the life of the session.
-  mode                 String    @default("regular")
+  mode                     String    @default("regular")
   // Question ids drawn for any player's challenge so far this game, across
   // all rounds/players — kept separate from questionIds (the main-round
   // draw) so a challenge never repeats a question already used anywhere in
   // this session.
-  usedChallengeQuestionIds String[] @default([])
+  usedChallengeQuestionIds String[]  @default([])
   // The 3 tags offered to players during the "voting" phase, for the
   // current round.
-  categoryChoices      String[]  @default([])
+  categoryChoices          String[]  @default([])
   // Winning tag for the current round, set once voting resolves.
-  category             String?
+  category                 String?
   // Question ids drawn so far, across all rounds played, in play order —
   // this keeps growing round to round rather than resetting, so scoreQuiz()
   // can score cumulatively against the full history with no extra bookkeeping.
-  questionIds          String[]  @default([])
-  currentQuestionIndex Int       @default(0)
+  questionIds              String[]  @default([])
+  currentQuestionIndex     Int       @default(0)
   // Index into questionIds where the current round's questions begin — a
   // round isn't guaranteed to be exactly QUESTIONS_PER_ROUND long (a thin
   // category tag can have fewer available), so this (not roundIndex *
   // QUESTIONS_PER_ROUND) is the source of truth for round boundaries.
-  roundStartIndex      Int       @default(0)
+  roundStartIndex          Int       @default(0)
   // When the question at currentQuestionIndex was shown — the answer timer
   // (QUESTION_TIMER_SECONDS) counts down from this.
-  questionStartedAt    DateTime?
+  questionStartedAt        DateTime?
   // 0-based; a game is TOTAL_ROUNDS rounds of QUESTIONS_PER_ROUND questions.
-  roundIndex           Int       @default(0)
+  roundIndex               Int       @default(0)
   // Winning tags from previous rounds, excluded from later rounds' category
   // choices so the same category isn't offered twice in one game.
-  usedTags             String[]  @default([])
+  usedTags                 String[]  @default([])
 
   // Tiebreak: only entered if 2+ players are tied for the top score after
   // the final round. Set once, resolved once — a game only ever needs at
@@ -154,31 +154,136 @@ model TiebreakerQuestion {
 }
 
 model GamePlayer {
-  id        String      @id @default(cuid())
-  sessionId String
-  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id          String      @id @default(cuid())
+  sessionId   String
+  session     GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   // 1-6, assigned at join time.
-  seat      Int
-  name      String
-  votedTag  String?
+  seat        Int
+  name        String
+  votedTag    String?
   // Answer[]-shaped (quiz-core), appended to as the player answers each
   // question — scored on read with quiz-core's scoreQuiz() against a
   // synthetic Quiz built from questionIds, not stored redundantly here.
-  answers   Json        @default("[]")
+  answers     Json        @default("[]")
   // Points earned from completed drinking-game challenges (party mode
   // only) — added on top of the quiz-core score, since challenge
   // questions aren't part of the main round and quiz-core has no concept
   // of them.
-  bonusPoints Int       @default(0)
+  bonusPoints Int         @default(0)
   // Current/last challenge attempt for this player, or null if they've
   // never opted in. Shape: { roundIndex, questionIds, answers,
   // questionStartedAt, completed, correct }. Only meaningful when its
   // roundIndex matches the session's current roundIndex — otherwise it's
   // a stale attempt from a round that already ended.
-  challenge Json?
-  joinedAt  DateTime    @default(now())
+  challenge   Json?
+  joinedAt    DateTime    @default(now())
+
+  // Set if this player was logged in when they joined/created the game —
+  // achievements only accrue to logged-in identities (anonymous play still
+  // works exactly as before, it just doesn't earn anything). Optional and
+  // SetNull on user deletion so a deleted account doesn't break the game.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, seat])
+  @@index([userId])
+}
+
+// Achievements
+//
+// A generic, criteria-driven system: `Achievement` is a static catalog (one
+// row per ACH-### from the design handoff), `AnswerEvent`/`GameCompletionEvent`
+// are an append-only log of everything a logged-in player does, and
+// `PlayerAchievement` records the moment each achievement's criteria were
+// first satisfied. Achievements only accrue to logged-in users — anonymous
+// play (still the default, no login required) isn't tracked at all.
+//
+// Evaluation is query-time, not incremental: `lib/achievements.ts` computes
+// aggregates from the event log and checks them against each achievement's
+// `criteria` after a game completes, rather than maintaining a running
+// counter per achievement. Simpler to get right, cheap enough at this scale.
+
+model Achievement {
+  // The ACH-### id from the source spreadsheet, used as-is (not a cuid) so
+  // re-seeding is idempotent and the id is stable/human-readable in logs.
+  id       String @id
+  nameEn   String
+  nameDa   String
+  descEn   String
+  descDa   String
+  // Loose grouping from the source data (e.g. "Games Played", "Cross-Tag",
+  // or a bare tag name like "movies" for single-category mastery ladders) —
+  // display-only, not used by the evaluator.
+  group    String
+  // "bronze" | "silver" | "gold" | "platinum" | "diamond" | "legendary" | "mythic"
+  tier     String
+  // "common" | "uncommon" | "rare" | "epic" | "legendary"
+  rarity   String
+  // Machine-checkable criteria, e.g. {"type":"games_played","min":10}. Null
+  // means this achievement is cataloged (shows up as locked/"coming soon")
+  // but has no evaluator yet — it needs a feature that doesn't exist yet
+  // (difficulty levels, avatars, referrals, sharing, ladder ranks, etc.).
+  criteria Json?
+
+  unlocks PlayerAchievement[]
+
+  @@index([group])
+}
+
+model PlayerAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+}
+
+// One row per answered question, across both game modes. `gameKey` groups
+// answers belonging to the same game (a GameSession.id for party mode, a
+// per-attempt token for solo mode) for in-game criteria like answer streaks.
+model AnswerEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode        String // "regular" | "party"
+  gameKey     String
+  tags        String[] @default([])
+  correct     Boolean
+  // Milliseconds from question shown to answer submitted. Null for solo
+  // mode (the client submits all answers in one batch at the end, with no
+  // per-question timestamp today) — timing-based criteria only ever
+  // consider non-null rows.
+  timeTakenMs Int?
+  answeredAt  DateTime @default(now())
+
+  @@index([userId, answeredAt])
+  @@index([userId, gameKey])
+}
+
+// One row per finished game (party round-robin finishing, or a solo quiz
+// attempt completing). Distinct from QuizAttempt/GameSession — this is a
+// denormalized summary purpose-built for achievement criteria, not the
+// source of truth for game state.
+model GameCompletionEvent {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode           String // "regular" | "party"
+  gameKey        String
+  isHost         Boolean  @default(false)
+  playerCount    Int?
+  correctCount   Int
+  totalQuestions Int
+  score          Int
+  wonGame        Boolean  @default(false)
+  finalRank      Int?
+  tags           String[] @default([])
+  playedAt       DateTime @default(now())
+
+  @@index([userId, playedAt])
 }
 
 // Auth.js (next-auth v5) Prisma adapter schema: https://authjs.dev/getting-started/adapters/prisma
@@ -190,9 +295,13 @@ model User {
   emailVerified DateTime?
   image         String?
 
-  accounts     Account[]
-  sessions     Session[]
-  quizAttempts QuizAttempt[]
+  accounts             Account[]
+  sessions             Session[]
+  quizAttempts         QuizAttempt[]
+  gamePlayers          GamePlayer[]
+  achievements         PlayerAchievement[]
+  answerEvents         AnswerEvent[]
+  gameCompletionEvents GameCompletionEvent[]
 }
 
 model Account {
