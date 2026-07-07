@@ -1,11 +1,12 @@
 import type { Quiz } from "@quiz/core";
 import { prisma } from "./db";
 
-export async function createQuiz(input: Omit<Quiz, "id">): Promise<Quiz> {
+export async function createQuiz(input: Omit<Quiz, "id">, folder?: string | null): Promise<Quiz> {
   const created = await prisma.quiz.create({
     data: {
       title: input.title,
       description: input.description,
+      folder: folder ?? null,
       questions: {
         create: input.questions.map((question, index) => ({
           order: index,
@@ -43,6 +44,15 @@ export async function createQuiz(input: Omit<Quiz, "id">): Promise<Quiz> {
 export async function deleteQuiz(id: string): Promise<boolean> {
   try {
     await prisma.quiz.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function moveQuizToFolder(id: string, folder: string | null): Promise<boolean> {
+  try {
+    await prisma.quiz.update({ where: { id }, data: { folder } });
     return true;
   } catch {
     return false;

@@ -19,6 +19,7 @@ export default async function AdminPage() {
           id: quiz.id,
           title: quiz.title,
           description: quiz.description,
+          folder: quiz.folder,
           questionCount: quiz.questionCount,
         }))}
       />

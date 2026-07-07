@@ -5,6 +5,7 @@ export interface QuizSummary {
   id: string;
   title: string;
   description?: string;
+  folder: string | null;
   questionCount: number;
   createdAt: Date;
 }
@@ -44,6 +45,7 @@ export async function listQuizzes(): Promise<QuizSummary[]> {
     id: quiz.id,
     title: quiz.title,
     description: quiz.description ?? undefined,
+    folder: quiz.folder,
     questionCount: quiz._count.questions,
     createdAt: quiz.createdAt,
   }));

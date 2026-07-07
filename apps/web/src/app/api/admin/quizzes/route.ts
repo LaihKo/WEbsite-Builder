@@ -27,6 +27,7 @@ export async function POST(request: Request) {
 
   const title = formData.get("title");
   const description = formData.get("description");
+  const folder = formData.get("folder");
   const file = formData.get("file");
 
   if (typeof title !== "string" || !title.trim()) {
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Validation failed", details: result.errors }, { status: 422 });
   }
 
-  const quiz = await createQuiz(result.quiz);
+  const quiz = await createQuiz(result.quiz, typeof folder === "string" && folder.trim() ? folder.trim() : null);
   return Response.json(
     { id: quiz.id, title: quiz.title, questionCount: quiz.questions.length },
     { status: 201 },

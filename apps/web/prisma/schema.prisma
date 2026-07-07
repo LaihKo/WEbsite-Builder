@@ -16,11 +16,16 @@ model Quiz {
   id          String   @id @default(cuid())
   title       String
   description String?
+  // Admin-organization only (grouping in the /admin quiz list) — not part
+  // of quiz-core's Quiz shape, not used by quiz-taking or scoring logic.
+  folder      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   questions Question[]
   attempts  QuizAttempt[]
+
+  @@index([folder])
 }
 
 model Question {

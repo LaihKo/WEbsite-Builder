@@ -1,5 +1,5 @@
 import { isAdminRequest } from "@/lib/adminAuth";
-import { deleteQuiz } from "@/lib/quizAdmin";
+import { deleteQuiz, moveQuizToFolder } from "@/lib/quizAdmin";
 
 export async function DELETE(
   _request: Request,
@@ -12,6 +12,31 @@ export async function DELETE(
   const { quizId } = await params;
   const deleted = await deleteQuiz(quizId);
   if (!deleted) {
+    return Response.json({ error: "Quiz not found" }, { status: 404 });
+  }
+  return Response.json({ ok: true });
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ quizId: string }> }) {
+  if (!(await isAdminRequest())) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const folder = (body as { folder?: unknown } | null)?.folder;
+  if (folder !== null && typeof folder !== "string") {
+    return Response.json({ error: "folder must be a string or null" }, { status: 400 });
+  }
+
+  const { quizId } = await params;
+  const moved = await moveQuizToFolder(quizId, folder?.trim() || null);
+  if (!moved) {
     return Response.json({ error: "Quiz not found" }, { status: 404 });
   }
   return Response.json({ ok: true });
