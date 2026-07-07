@@ -137,11 +137,11 @@ export function PartyRoom({ code }: { code: string }) {
         body: JSON.stringify({ name: joinName }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "Failed to join game");
+      if (!res.ok) throw new Error(data?.error ?? "Kunne ikke deltage i spillet");
       savePlayerId(code, data.playerId);
       setPlayerId(data.playerId);
     } catch (err) {
-      setJoinError(err instanceof Error ? err.message : "Failed to join game");
+      setJoinError(err instanceof Error ? err.message : "Kunne ikke deltage i spillet");
     } finally {
       setJoining(false);
     }
@@ -169,11 +169,11 @@ export function PartyRoom({ code }: { code: string }) {
   }
 
   function handleStart() {
-    postAction("start", { playerId }, "Failed to start voting");
+    postAction("start", { playerId }, "Kunne ikke starte afstemningen");
   }
 
   function handleVote(tag: string) {
-    postAction("vote", { playerId, tag }, "Failed to vote");
+    postAction("vote", { playerId, tag }, "Kunne ikke stemme");
   }
 
   function handleSubmitAnswer() {
@@ -181,19 +181,19 @@ export function PartyRoom({ code }: { code: string }) {
     postAction(
       "answer",
       { playerId, questionId: state.currentQuestion.id, selectedOptionId },
-      "Failed to submit answer",
+      "Kunne ikke indsende svar",
     );
   }
 
   function handleAdvanceRound() {
-    postAction("advance-round", { playerId }, "Failed to continue");
+    postAction("advance-round", { playerId }, "Kunne ikke fortsætte");
   }
 
   function handleSubmitTiebreak(event: FormEvent) {
     event.preventDefault();
     const guess = Number(tiebreakGuess);
     if (!Number.isFinite(guess)) return;
-    postAction("tiebreak-answer", { playerId, guess }, "Failed to submit guess");
+    postAction("tiebreak-answer", { playerId, guess }, "Kunne ikke indsende gæt");
   }
 
   function handlePlayAgain() {
@@ -205,10 +205,10 @@ export function PartyRoom({ code }: { code: string }) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
         <p className="text-zinc-500">
-          Game <span className="font-mono">{code}</span> doesn&apos;t exist (or has ended).
+          Spillet <span className="font-mono">{code}</span> findes ikke (eller er slut).
         </p>
         <button onClick={() => router.push("/party")} className="text-sm hover:underline">
-          Back to start
+          Tilbage til start
         </button>
       </div>
     );
@@ -218,10 +218,10 @@ export function PartyRoom({ code }: { code: string }) {
     return (
       <form onSubmit={handleJoin} className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold">
-          Join game <span className="font-mono">{code}</span>
+          Deltag i spil <span className="font-mono">{code}</span>
         </h1>
         <input
-          placeholder="Your name"
+          placeholder="Dit navn"
           value={joinName}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setJoinName(event.target.value)}
           autoFocus
@@ -233,14 +233,14 @@ export function PartyRoom({ code }: { code: string }) {
           disabled={joining || !joinName.trim()}
           className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
         >
-          Join
+          Deltag
         </button>
       </form>
     );
   }
 
   if (!state) {
-    return <p className="text-zinc-500">Loading…</p>;
+    return <p className="text-zinc-500">Indlæser…</p>;
   }
 
   const you = state.players.find((p) => p.seat === state.you?.seat) ?? null;
@@ -252,7 +252,7 @@ export function PartyRoom({ code }: { code: string }) {
 
       {state.status === "lobby" && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm text-zinc-500">Share this code:</p>
+          <p className="text-sm text-zinc-500">Del denne kode:</p>
           <p className="text-4xl font-mono font-bold tracking-widest">{code}</p>
           <ul className="flex w-full flex-col gap-1">
             {Array.from({ length: 6 }, (_, i) => i + 1).map((seat) => {
@@ -266,7 +266,7 @@ export function PartyRoom({ code }: { code: string }) {
                       : "border-dashed border-black/[.08] text-zinc-400 dark:border-white/[.145]"
                   }`}
                 >
-                  {player ? `${player.name}${seat === 1 ? " (host)" : ""}` : "waiting for player…"}
+                  {player ? `${player.name}${seat === 1 ? " (vært)" : ""}` : "venter på spiller…"}
                 </li>
               );
             })}
@@ -277,10 +277,10 @@ export function PartyRoom({ code }: { code: string }) {
               disabled={actionPending}
               className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
             >
-              Start voting
+              Start afstemning
             </button>
           ) : (
-            <p className="text-sm text-zinc-500">Waiting for the host to start…</p>
+            <p className="text-sm text-zinc-500">Venter på, at værten starter…</p>
           )}
         </div>
       )}
@@ -288,9 +288,9 @@ export function PartyRoom({ code }: { code: string }) {
       {state.status === "voting" && (
         <div className="flex flex-col items-center gap-4 text-center">
           <p className="text-sm text-zinc-500">
-            Round {state.roundIndex + 1} of {state.totalRounds}
+            Runde {state.roundIndex + 1} af {state.totalRounds}
           </p>
-          <h2 className="text-xl font-semibold">Vote for a category</h2>
+          <h2 className="text-xl font-semibold">Stem om en kategori</h2>
           <div className="flex w-full flex-col gap-2">
             {state.categoryChoices.map((tag) => (
               <button
@@ -308,7 +308,7 @@ export function PartyRoom({ code }: { code: string }) {
             ))}
           </div>
           <p className="text-sm text-zinc-500">
-            {state.players.filter((p) => p.hasVoted).length} / {state.players.length} voted
+            {state.players.filter((p) => p.hasVoted).length} / {state.players.length} har stemt
           </p>
         </div>
       )}
@@ -317,16 +317,16 @@ export function PartyRoom({ code }: { code: string }) {
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between text-sm text-zinc-500">
             <p>
-              Round {state.roundIndex + 1} of {state.totalRounds} —{" "}
-              <span className="capitalize">{state.category?.replace(/-/g, " ")}</span> — question{" "}
-              {state.questionIndexInRound + 1} of {state.questionsInCurrentRound}
+              Runde {state.roundIndex + 1} af {state.totalRounds} —{" "}
+              <span className="capitalize">{state.category?.replace(/-/g, " ")}</span> — spørgsmål{" "}
+              {state.questionIndexInRound + 1} af {state.questionsInCurrentRound}
             </p>
             <p className="font-mono tabular-nums">{questionSecondsLeft ?? "–"}s</p>
           </div>
           {you?.hasAnsweredCurrent ? (
             <p className="text-center text-zinc-500">
-              Answer submitted — waiting for {state.players.filter((p) => !p.hasAnsweredCurrent).length}{" "}
-              more player(s)…
+              Svar indsendt — venter på {state.players.filter((p) => !p.hasAnsweredCurrent).length}{" "}
+              spiller(e) mere…
             </p>
           ) : (
             <>
@@ -358,7 +358,7 @@ export function PartyRoom({ code }: { code: string }) {
                 disabled={actionPending || !selectedOptionId}
                 className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
               >
-                Submit
+                Indsend
               </button>
             </>
           )}
@@ -368,7 +368,7 @@ export function PartyRoom({ code }: { code: string }) {
 
       {state.status === "round-summary" && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <h2 className="text-xl font-semibold">Round {state.roundIndex + 1} complete!</h2>
+          <h2 className="text-xl font-semibold">Runde {state.roundIndex + 1} færdig!</h2>
           <Scoreboard players={state.players} />
           {state.isHost ? (
             <button
@@ -376,10 +376,10 @@ export function PartyRoom({ code }: { code: string }) {
               disabled={actionPending}
               className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
             >
-              {isLastRound ? "See final results" : "Start next round"}
+              {isLastRound ? "Se det endelige resultat" : "Start næste runde"}
             </button>
           ) : (
-            <p className="text-sm text-zinc-500">Waiting for the host to continue…</p>
+            <p className="text-sm text-zinc-500">Venter på, at værten fortsætter…</p>
           )}
         </div>
       )}
@@ -400,13 +400,13 @@ export function PartyRoom({ code }: { code: string }) {
 
       {state.status === "completed" && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <h2 className="text-2xl font-semibold">Game over!</h2>
+          <h2 className="text-2xl font-semibold">Spillet er slut!</h2>
           {state.tiebreak && (
             <TiebreakReveal tiebreak={state.tiebreak} players={state.players} />
           )}
           <Scoreboard players={state.players} winnerSeats={state.winnerSeats} />
           <button onClick={handlePlayAgain} className="text-sm hover:underline">
-            Play again
+            Spil igen
           </button>
         </div>
       )}
@@ -436,14 +436,14 @@ function TiebreakPanel({
   players: PlayerView[];
 }) {
   const tiedNames = tiebreak.participantSeats
-    .map((seat) => players.find((p) => p.seat === seat)?.name ?? `Seat ${seat}`)
-    .join(" and ");
+    .map((seat) => players.find((p) => p.seat === seat)?.name ?? `Plads ${seat}`)
+    .join(" og ");
   const answeredCount = tiebreak.guesses.filter((g) => g.hasAnswered).length;
 
   return (
     <div className="flex flex-col items-center gap-4 text-center">
       <p className="text-sm text-zinc-500">
-        {tiedNames} are tied for first place — closest guess wins!
+        {tiedNames} er lige om førstepladsen — nærmeste gæt vinder!
       </p>
       <div className="flex items-center justify-between w-full text-sm text-zinc-500">
         <span>Tiebreaker</span>
@@ -453,13 +453,13 @@ function TiebreakPanel({
 
       {isParticipant ? (
         hasAnswered ? (
-          <p className="text-zinc-500">Guess submitted — waiting for {answeredCount < tiebreak.participantSeats.length ? "the other tied player(s)" : "results"}…</p>
+          <p className="text-zinc-500">Gæt indsendt — venter på {answeredCount < tiebreak.participantSeats.length ? "de andre spillere, der er lige med dig" : "resultatet"}…</p>
         ) : (
           <form onSubmit={onSubmit} className="flex w-full flex-col gap-3">
             <input
               type="number"
               inputMode="numeric"
-              placeholder="Your guess"
+              placeholder="Dit gæt"
               value={guess}
               onChange={(event: ChangeEvent<HTMLInputElement>) => onGuessChange(event.target.value)}
               autoFocus
@@ -470,13 +470,13 @@ function TiebreakPanel({
               disabled={submitDisabled || guess.trim() === ""}
               className="self-center rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
             >
-              Submit guess
+              Indsend gæt
             </button>
           </form>
         )
       ) : (
         <p className="text-zinc-500">
-          You&apos;re not tied for first — you can watch, but only {tiedNames} can answer this one.
+          Du er ikke lige med om førstepladsen — du kan følge med, men kun {tiedNames} kan svare på denne.
         </p>
       )}
     </div>
@@ -487,12 +487,12 @@ function TiebreakReveal({ tiebreak, players }: { tiebreak: TiebreakView; players
   return (
     <div className="flex w-full flex-col gap-2 rounded-lg border border-black/[.08] p-4 text-left text-sm dark:border-white/[.145]">
       <p className="font-medium">Tiebreaker: {tiebreak.prompt}</p>
-      <p className="text-zinc-500">Reference answer: {tiebreak.answer}</p>
+      <p className="text-zinc-500">Referencesvar: {tiebreak.answer}</p>
       <ul className="flex flex-col gap-1">
         {tiebreak.guesses.map((g) => (
           <li key={g.seat} className="flex justify-between">
-            <span>{players.find((p) => p.seat === g.seat)?.name ?? `Seat ${g.seat}`}</span>
-            <span className="text-zinc-500">{g.guess ?? "no guess"}</span>
+            <span>{players.find((p) => p.seat === g.seat)?.name ?? `Plads ${g.seat}`}</span>
+            <span className="text-zinc-500">{g.guess ?? "intet gæt"}</span>
           </li>
         ))}
       </ul>
@@ -515,9 +515,9 @@ function Scoreboard({ players, winnerSeats }: { players: PlayerView[]; winnerSea
           >
             <span>
               {index + 1}. {player.name}
-              {isWinner ? " — winner" : isLeader ? " — leading" : ""}
+              {isWinner ? " — vinder" : isLeader ? " — fører" : ""}
             </span>
-            <span className="text-zinc-500">{player.scorePoints} pts</span>
+            <span className="text-zinc-500">{player.scorePoints} point</span>
           </li>
         );
       })}

@@ -4,18 +4,18 @@ import { QUIZ_TEMPLATE_HEADERS } from "@/lib/parseQuizWorkbook";
 
 export async function GET() {
   if (!(await isAdminRequest())) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: "Ikke logget ind" }, { status: 401 });
   }
 
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Questions");
   sheet.addRow(QUIZ_TEMPLATE_HEADERS);
   sheet.addRow([
-    "What is the capital of France?",
-    "Paris",
-    "Berlin",
-    "Madrid",
-    "Rome",
+    "Hvad er hovedstaden i Danmark?",
+    "København",
+    "Aarhus",
+    "Odense",
+    "Aalborg",
     "A",
     1,
     "geography, capitals",

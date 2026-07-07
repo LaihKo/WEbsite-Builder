@@ -8,21 +8,21 @@ const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
 export async function GET() {
   if (!(await isAdminRequest())) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: "Ikke logget ind" }, { status: 401 });
   }
   return Response.json(await listQuizzes());
 }
 
 export async function POST(request: Request) {
   if (!(await isAdminRequest())) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: "Ikke logget ind" }, { status: 401 });
   }
 
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return Response.json({ error: "Invalid form data" }, { status: 400 });
+    return Response.json({ error: "Ugyldige formulardata" }, { status: 400 });
   }
 
   const title = formData.get("title");
@@ -31,13 +31,13 @@ export async function POST(request: Request) {
   const file = formData.get("file");
 
   if (typeof title !== "string" || !title.trim()) {
-    return Response.json({ error: "Title is required" }, { status: 400 });
+    return Response.json({ error: "Titel er påkrævet" }, { status: 400 });
   }
   if (!(file instanceof File)) {
-    return Response.json({ error: "An .xlsx file is required" }, { status: 400 });
+    return Response.json({ error: "En .xlsx-fil er påkrævet" }, { status: 400 });
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return Response.json({ error: "File is too large (max 2 MB)" }, { status: 413 });
+    return Response.json({ error: "Filen er for stor (maks. 2 MB)" }, { status: 413 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     rows = await parseQuizWorkbook(buffer);
   } catch {
     return Response.json(
-      { error: "Could not read the uploaded file — is it a valid .xlsx?" },
+      { error: "Kunne ikke læse den uploadede fil — er det en gyldig .xlsx?" },
       { status: 400 },
     );
   }
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   });
 
   if (!result.quiz) {
-    return Response.json({ error: "Validation failed", details: result.errors }, { status: 422 });
+    return Response.json({ error: "Validering mislykkedes", details: result.errors }, { status: 422 });
   }
 
   const quiz = await createQuiz(result.quiz, typeof folder === "string" && folder.trim() ? folder.trim() : null);

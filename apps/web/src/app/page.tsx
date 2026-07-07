@@ -6,18 +6,18 @@ export default function Home() {
       <div className="flex flex-col gap-3">
         <h1 className="text-4xl font-semibold tracking-tight">Quiz Platform</h1>
         <p className="max-w-md text-zinc-600 dark:text-zinc-400">
-          1-6 players, each on their own device. Vote on a category, then race through the same
-          questions together.
+          1-6 spillere, hver på sin egen enhed. Stem om en kategori, og kæmp jer derefter igennem
+          de samme spørgsmål sammen.
         </p>
       </div>
       <Link
         href="/party"
         className="rounded-full bg-foreground px-8 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
       >
-        Play
+        Spil
       </Link>
       <Link href="/quiz/test-example" className="text-sm text-zinc-500 hover:underline">
-        Try a test example first
+        Prøv et testeksempel først
       </Link>
     </main>
   );

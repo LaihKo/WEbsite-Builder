@@ -23,21 +23,21 @@ export async function POST(
   { params }: { params: Promise<{ quizId: string }> },
 ) {
   if (isRateLimited(`submit:${getClientKey(request)}`, 10)) {
-    return Response.json({ error: "Too many requests" }, { status: 429 });
+    return Response.json({ error: "For mange anmodninger" }, { status: 429 });
   }
 
   const { quizId } = await params;
   const quiz = await getQuizById(quizId);
 
   if (!quiz) {
-    return Response.json({ error: "Quiz not found" }, { status: 404 });
+    return Response.json({ error: "Quizzen blev ikke fundet" }, { status: 404 });
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return Response.json({ error: "Ugyldig JSON-body" }, { status: 400 });
   }
 
   const answers = (body as { answers?: unknown } | null)?.answers;

@@ -43,12 +43,12 @@ async function uploadQuizFile(
   if (res.ok) return { ok: true };
   const data = await res.json().catch(() => null);
   const message: string | undefined = data?.details?.length
-    ? data.details.map((d: QuizImportError) => (d.row > 0 ? `Row ${d.row}: ${d.message}` : d.message)).join("; ")
+    ? data.details.map((d: QuizImportError) => (d.row > 0 ? `Række ${d.row}: ${d.message}` : d.message)).join("; ")
     : data?.error;
-  return { ok: false, message: message ?? "Upload failed" };
+  return { ok: false, message: message ?? "Upload mislykkedes" };
 }
 
-const NO_FOLDER = "No folder";
+const NO_FOLDER = "Ingen mappe";
 
 export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSummaryView[] }) {
   const router = useRouter();
@@ -104,7 +104,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         if (data?.details) setFieldErrors(data.details);
-        throw new Error(data?.error ?? "Upload failed");
+        throw new Error(data?.error ?? "Upload mislykkedes");
       }
       setTitle("");
       setDescription("");
@@ -113,7 +113,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
       const listRes = await fetch("/api/admin/quizzes");
       if (listRes.ok) setQuizzes(await listRes.json());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setError(err instanceof Error ? err.message : "Upload mislykkedes");
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +142,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm("Delete this quiz? This cannot be undone.")) return;
+    if (!window.confirm("Slet denne quiz? Dette kan ikke fortrydes.")) return;
     const res = await fetch(`/api/admin/quizzes/${id}`, { method: "DELETE" });
     if (res.ok) setQuizzes((prev) => prev.filter((quiz) => quiz.id !== id));
   }
@@ -168,7 +168,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Admin</h1>
         <button onClick={handleLogout} className="text-sm text-zinc-500 hover:underline">
-          Sign out
+          Log ud
         </button>
       </div>
 
@@ -180,27 +180,27 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium">Upload a quiz</h2>
+          <h2 className="text-lg font-medium">Upload en quiz</h2>
           <a href="/api/admin/template" className="text-sm text-zinc-500 hover:underline">
-            Download template (.xlsx)
+            Download skabelon (.xlsx)
           </a>
         </div>
         <form onSubmit={handleUpload} className="flex flex-col gap-3">
           <input
-            placeholder="Quiz title"
+            placeholder="Quiztitel"
             value={title}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
             required
             className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
           />
           <input
-            placeholder="Description (optional)"
+            placeholder="Beskrivelse (valgfri)"
             value={description}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setDescription(event.target.value)}
             className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
           />
           <input
-            placeholder="Folder (optional)"
+            placeholder="Mappe (valgfri)"
             list="quiz-folder-names"
             value={folder}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setFolder(event.target.value)}
@@ -218,7 +218,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
             <ul className="list-disc pl-5 text-sm text-red-600 dark:text-red-400">
               {fieldErrors.map((fieldError, index) => (
                 <li key={index}>
-                  {fieldError.row > 0 ? `Row ${fieldError.row}: ` : ""}
+                  {fieldError.row > 0 ? `Række ${fieldError.row}: ` : ""}
                   {fieldError.message}
                 </li>
               ))}
@@ -229,19 +229,19 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
             disabled={submitting || !file || !title}
             className="self-start rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
           >
-            {submitting ? "Uploading…" : "Upload"}
+            {submitting ? "Uploader…" : "Upload"}
           </button>
         </form>
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">Bulk upload</h2>
+        <h2 className="text-lg font-medium">Bulk-upload</h2>
         <p className="text-sm text-zinc-500">
-          Select multiple .xlsx files at once — each becomes its own quiz, titled after its filename.
+          Vælg flere .xlsx-filer på én gang — hver bliver sin egen quiz, opkaldt efter filnavnet.
         </p>
         <form onSubmit={handleBulkUpload} className="flex flex-col gap-3">
           <input
-            placeholder="Folder for this batch (optional)"
+            placeholder="Mappe til denne batch (valgfri)"
             list="quiz-folder-names"
             value={bulkFolder}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setBulkFolder(event.target.value)}
@@ -262,10 +262,10 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
             className="self-start rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
           >
             {bulkSubmitting
-              ? `Uploading ${bulkProgress}/${bulkFiles.length}…`
+              ? `Uploader ${bulkProgress}/${bulkFiles.length}…`
               : bulkFiles.length > 0
-                ? `Upload ${bulkFiles.length} quizzes`
-                : "Upload quizzes"}
+                ? `Upload ${bulkFiles.length} quizzer`
+                : "Upload quizzer"}
           </button>
           {bulkResults.length > 0 && (
             <ul className="flex flex-col gap-1 text-sm">
@@ -284,8 +284,8 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Quizzes ({quizzes.length})</h2>
-        {quizzes.length === 0 && <p className="text-sm text-zinc-500">No quizzes yet.</p>}
+        <h2 className="text-lg font-medium">Quizzer ({quizzes.length})</h2>
+        {quizzes.length === 0 && <p className="text-sm text-zinc-500">Ingen quizzer endnu.</p>}
         <div className="flex flex-col gap-2">
           {groupedQuizzes.map(([folderName, folderQuizzes]) => (
             <details
@@ -333,11 +333,11 @@ function QuizRow({
     <li className="flex flex-col gap-2 rounded-lg border border-black/[.08] px-4 py-3 dark:border-white/[.145] sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="font-medium">{quiz.title}</p>
-        <p className="text-sm text-zinc-500">{quiz.questionCount} questions</p>
+        <p className="text-sm text-zinc-500">{quiz.questionCount} spørgsmål</p>
       </div>
       <div className="flex items-center gap-3">
         <input
-          placeholder="Move to folder…"
+          placeholder="Flyt til mappe…"
           list="quiz-folder-names"
           value={moveValue}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setMoveValue(event.target.value)}
@@ -348,16 +348,16 @@ function QuizRow({
           disabled={moving || moveValue === (quiz.folder ?? "")}
           className="text-sm enabled:hover:underline disabled:opacity-40"
         >
-          Move
+          Flyt
         </button>
         <a href={`/quiz/${quiz.id}`} className="text-sm hover:underline">
-          Take
+          Tag quizzen
         </a>
         <button
           onClick={() => onDelete(quiz.id)}
           className="text-sm text-red-600 hover:underline dark:text-red-400"
         >
-          Delete
+          Slet
         </button>
       </div>
     </li>

@@ -9,7 +9,7 @@ export async function GET(
   const quiz = await getQuizById(quizId);
 
   if (!quiz) {
-    return Response.json({ error: "Quiz not found" }, { status: 404 });
+    return Response.json({ error: "Quizzen blev ikke fundet" }, { status: 404 });
   }
 
   return Response.json(toPublicQuiz(quiz));
