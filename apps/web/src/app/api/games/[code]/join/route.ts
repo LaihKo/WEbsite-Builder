@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { joinGame } from "@/lib/games";
 import { getClientKey, isRateLimited } from "@/lib/rateLimit";
 
@@ -27,7 +28,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     return Response.json({ error: "Navn er påkrævet" }, { status: 400 });
   }
 
-  const result = await joinGame(code.toUpperCase(), name.slice(0, 40));
+  const session = await auth();
+  const result = await joinGame(code.toUpperCase(), name.slice(0, 40), session?.user?.id);
   if (!result.ok) {
     const { message, status } = ERROR_MESSAGES[result.error];
     return Response.json({ error: message }, { status });
