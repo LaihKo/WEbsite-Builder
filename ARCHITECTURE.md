@@ -216,6 +216,16 @@ to work immediately, so it's a separate, simpler mechanism:
   workbooks server-side could hit, and lets each file succeed or fail
   independently with its own per-row validation errors shown inline instead
   of one bad file aborting the whole batch.
+- **Quiz folders**: `Quiz.folder` is a plain nullable string, admin-organization
+  only — it groups quizzes in the `/admin` list (rendered as collapsible
+  `<details>` sections, collapsed by default) and is otherwise inert: not
+  part of `quiz-core`'s `Quiz` type, not read by quiz-taking, scoring, or
+  party mode (which draws by `Question.tags` across all quizzes regardless
+  of folder). Set at upload time (single or whole-batch for bulk upload) or
+  changed later via `PATCH /api/admin/quizzes/[quizId]`. No dedicated
+  "folder" table — it's just a string admins reuse via a `<datalist>` of
+  existing values, so renaming is per-quiz (move each one) rather than a
+  single rename-the-folder operation.
 
 ### Excel format
 
