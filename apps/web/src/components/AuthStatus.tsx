@@ -12,10 +12,8 @@ export async function AuthStatus() {
         }}
         className="flex items-center gap-3 text-sm"
       >
-        <span className="text-zinc-600 dark:text-zinc-400">
-          {session.user.name ?? session.user.email}
-        </span>
-        <button type="submit" className="underline underline-offset-2">
+        <span className="text-muted">{session.user.name ?? session.user.email}</span>
+        <button type="submit" className="text-accent hover:underline">
           Log ud
         </button>
       </form>
@@ -30,7 +28,7 @@ export async function AuthStatus() {
           await signIn("google");
         }}
       >
-        <button type="submit" className="underline underline-offset-2">
+        <button type="submit" className="text-accent hover:underline">
           Log ind med Google
         </button>
       </form>
@@ -40,7 +38,7 @@ export async function AuthStatus() {
           await signIn("facebook");
         }}
       >
-        <button type="submit" className="underline underline-offset-2">
+        <button type="submit" className="text-accent hover:underline">
           Log ind med Facebook
         </button>
       </form>

@@ -1,26 +1,103 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------ *
+ *  Kouiz — Partyquiz design tokens
+ *  Dark is the primary, designed theme; a sensible light theme is kept
+ *  so `prefers-color-scheme: light` still works. Toggle the two blocks
+ *  below if you later want an explicit `.dark` class strategy instead.
+ * ------------------------------------------------------------------ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* surfaces */
+  --background: #0F0E15;   /* app canvas          */
+  --surface:    #1B1922;   /* cards, inputs, rows */
+  --surface-2:  #24212D;   /* hover / disabled    */
+  --border:     #2A2833;   /* hairline borders (≈ white @ 10%) */
+
+  /* text */
+  --foreground: #F6F4EF;   /* primary text        */
+  --muted:      #A29EAD;   /* secondary text      */
+  --faint:      #6E6B78;   /* tertiary / disabled */
+
+  /* brand */
+  --accent:               #7C5CFF; /* violet — primary actions            */
+  --accent-foreground:    #FFFFFF;
+  --accent-2:             #C6FF3D; /* lime — live/winner/leader accents   */
+  --accent-2-foreground:  #101018;
+  --danger:               #FF6B6B; /* timer critical, errors              */
+
+  /* radii */
+  --radius:     14px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+
+  /* fonts (paired with next/font variables — see layout.tsx) */
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:    "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #F6F4EF;
+    --surface:    #FFFFFF;
+    --surface-2:  #EFECE4;
+    --border:     #E4E0D7;
+    --foreground: #16151A;
+    --muted:      #6B6870;
+    --faint:      #9C99A3;
+    --accent:               #6B4EF0;
+    --accent-foreground:    #FFFFFF;
+    --accent-2:             #C6FF3D;
+    --accent-2-foreground:  #101018;
+    --danger:               #E5484D;
   }
+}
+
+/* Expose the tokens to Tailwind utilities:
+   bg-surface, text-muted, border-border, text-accent, bg-accent-2,
+   font-display, rounded-xl (→ --radius-xl), etc. */
+@theme inline {
+  --color-background:            var(--background);
+  --color-surface:               var(--surface);
+  --color-surface-2:             var(--surface-2);
+  --color-border:                var(--border);
+  --color-foreground:            var(--foreground);
+  --color-muted:                 var(--muted);
+  --color-faint:                 var(--faint);
+  --color-accent:                var(--accent);
+  --color-accent-foreground:     var(--accent-foreground);
+  --color-accent-2:              var(--accent-2);
+  --color-accent-2-foreground:   var(--accent-2-foreground);
+  --color-danger:                var(--danger);
+
+  --font-display: var(--font-display);
+  --font-sans:    var(--font-sans);
+  --font-mono:    var(--font-mono);
+
+  --radius:    var(--radius);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes kz-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
+
+.animate-kz-blink {
+  animation: kz-blink 1.6s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-kz-blink {
+    animation: none;
+  }
 }

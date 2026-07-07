@@ -34,20 +34,20 @@ export function AdminLoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Admin-login</h1>
+      <h1 className="font-display text-2xl font-bold">Admin-login</h1>
       <input
         type="password"
         autoFocus
         placeholder="Adgangskode"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
-        className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
+        className="rounded-2xl border border-border bg-surface px-4 py-4 text-foreground outline-none transition-colors focus:border-accent placeholder:text-faint"
       />
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       <button
         type="submit"
         disabled={submitting || !password}
-        className="rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
+        className="rounded-2xl bg-accent px-5 py-4 font-display text-lg font-bold text-accent-foreground shadow-[0_14px_30px_-12px_var(--accent)] transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-faint disabled:shadow-none"
       >
         {submitting ? "Logger ind…" : "Log ind"}
       </button>
