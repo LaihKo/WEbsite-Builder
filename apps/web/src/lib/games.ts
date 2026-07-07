@@ -258,13 +258,21 @@ export async function castVote(code: string, playerId: string, tag: string): Pro
   if (!session.categoryChoices.includes(tag)) return { ok: false, error: "invalid_category" };
   const player = session.players.find((p) => p.id === playerId);
   if (!player) return { ok: false, error: "not_in_game" };
+  if (player.votedTag === tag) return { ok: true }; // idempotent re-click/retry
 
   await prisma.gamePlayer.update({ where: { id: playerId }, data: { votedTag: tag } });
 
-  const allVoted = session.players.every((p) => (p.id === playerId ? true : p.votedTag));
+  // Re-read after writing rather than reusing the snapshot fetched at the
+  // top of this call — two votes landing close together could otherwise
+  // each see the *other* as not-yet-voted (both fetched before either
+  // write completed) and neither would trigger the tally, permanently
+  // stalling the game in "voting". The guarded updateMany in
+  // tallyVotesAndStartPlaying already makes it safe if both requests end
+  // up calling this.
+  const freshPlayers = await prisma.gamePlayer.findMany({ where: { sessionId: session.id } });
+  const allVoted = freshPlayers.every((p) => p.votedTag);
   if (allVoted) {
-    const votes = session.players.map((p) => (p.id === playerId ? tag : (p.votedTag as string)));
-    await tallyVotesAndStartPlaying(session, votes);
+    await tallyVotesAndStartPlaying(session, freshPlayers.map((p) => p.votedTag as string));
   }
   return { ok: true };
 }
@@ -302,16 +310,22 @@ export async function submitAnswer(
 ): Promise<ActionResult> {
   const session = await prisma.gameSession.findUnique({ where: { code }, include: { players: true } });
   if (!session) return { ok: false, error: "not_found" };
-  if (session.status !== "playing") return { ok: false, error: "not_playing" };
-  const currentQuestionId = session.questionIds[session.currentQuestionIndex];
-  if (questionId !== currentQuestionId) return { ok: false, error: "not_current_question" };
   const player = session.players.find((p) => p.id === playerId);
   if (!player) return { ok: false, error: "not_in_game" };
 
+  // A duplicate/retried submission for a question this player has already
+  // recorded an answer for is a harmless no-op — checked before the
+  // current-question check so a request that's merely arrived late (e.g. a
+  // double-click that raced the round advancing past this question) isn't
+  // treated as an error.
   const existingAnswers = (player.answers as unknown as Answer[]) ?? [];
   if (existingAnswers.some((a) => a.questionId === questionId)) {
-    return { ok: false, error: "already_answered" };
+    return { ok: true };
   }
+
+  if (session.status !== "playing") return { ok: false, error: "not_playing" };
+  const currentQuestionId = session.questionIds[session.currentQuestionIndex];
+  if (questionId !== currentQuestionId) return { ok: false, error: "not_current_question" };
 
   const updatedAnswers: Answer[] = [...existingAnswers, { questionId, selectedOptionId }];
   await prisma.gamePlayer.update({
@@ -319,8 +333,12 @@ export async function submitAnswer(
     data: { answers: updatedAnswers as object },
   });
 
-  const allAnswered = session.players.every((p) => {
-    if (p.id === playerId) return true;
+  // Re-read after writing rather than reusing the snapshot fetched at the
+  // top of this call — see castVote for why (two answers landing close
+  // together could otherwise each miss the other's write and neither would
+  // advance the question).
+  const freshPlayers = await prisma.gamePlayer.findMany({ where: { sessionId: session.id } });
+  const allAnswered = freshPlayers.every((p) => {
     const answers = (p.answers as unknown as Answer[]) ?? [];
     return answers.some((a) => a.questionId === questionId);
   });

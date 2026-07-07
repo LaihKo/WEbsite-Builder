@@ -76,6 +76,7 @@ export function PartyRoom({ code }: { code: string }) {
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [tiebreakGuess, setTiebreakGuess] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
   const [questionSecondsLeft, setQuestionSecondsLeft] = useState<number | null>(null);
   const [tiebreakSecondsLeft, setTiebreakSecondsLeft] = useState<number | null>(null);
   const lastQuestionId = useRef<string | null>(null);
@@ -147,18 +148,24 @@ export function PartyRoom({ code }: { code: string }) {
   }
 
   async function postAction(path: string, body: object, fallbackError: string) {
+    if (actionPending) return;
+    setActionPending(true);
     setActionError(null);
-    const res = await fetch(`/api/games/${code}/${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setActionError(data?.error ?? fallbackError);
-      return;
+    try {
+      const res = await fetch(`/api/games/${code}/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setActionError(data?.error ?? fallbackError);
+        return;
+      }
+      poll();
+    } finally {
+      setActionPending(false);
     }
-    poll();
   }
 
   function handleStart() {
@@ -267,7 +274,8 @@ export function PartyRoom({ code }: { code: string }) {
           {state.isHost ? (
             <button
               onClick={handleStart}
-              className="rounded-full bg-foreground px-5 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+              disabled={actionPending}
+              className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
             >
               Start voting
             </button>
@@ -288,7 +296,7 @@ export function PartyRoom({ code }: { code: string }) {
               <button
                 key={tag}
                 onClick={() => handleVote(tag)}
-                disabled={Boolean(state.you?.votedTag)}
+                disabled={actionPending || Boolean(state.you?.votedTag)}
                 className={`rounded-lg border px-4 py-3 capitalize transition-colors disabled:cursor-not-allowed ${
                   state.you?.votedTag === tag
                     ? "border-foreground bg-black/[.04] dark:bg-white/[.08]"
@@ -347,7 +355,7 @@ export function PartyRoom({ code }: { code: string }) {
               </div>
               <button
                 onClick={handleSubmitAnswer}
-                disabled={!selectedOptionId}
+                disabled={actionPending || !selectedOptionId}
                 className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
               >
                 Submit
@@ -365,7 +373,8 @@ export function PartyRoom({ code }: { code: string }) {
           {state.isHost ? (
             <button
               onClick={handleAdvanceRound}
-              className="rounded-full bg-foreground px-5 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+              disabled={actionPending}
+              className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
             >
               {isLastRound ? "See final results" : "Start next round"}
             </button>
@@ -384,6 +393,7 @@ export function PartyRoom({ code }: { code: string }) {
           guess={tiebreakGuess}
           onGuessChange={setTiebreakGuess}
           onSubmit={handleSubmitTiebreak}
+          submitDisabled={actionPending}
           players={state.players}
         />
       )}
@@ -412,6 +422,7 @@ function TiebreakPanel({
   guess,
   onGuessChange,
   onSubmit,
+  submitDisabled,
   players,
 }: {
   tiebreak: TiebreakView;
@@ -421,6 +432,7 @@ function TiebreakPanel({
   guess: string;
   onGuessChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
+  submitDisabled: boolean;
   players: PlayerView[];
 }) {
   const tiedNames = tiebreak.participantSeats
@@ -455,7 +467,7 @@ function TiebreakPanel({
             />
             <button
               type="submit"
-              disabled={guess.trim() === ""}
+              disabled={submitDisabled || guess.trim() === ""}
               className="self-center rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
             >
               Submit guess
