@@ -5,7 +5,6 @@ const ERROR_MESSAGES: Record<string, { message: string; status: number }> = {
   not_in_game: { message: "You're not in this game", status: 403 },
   not_playing: { message: "This game isn't in the playing phase", status: 409 },
   not_current_question: { message: "That isn't the current question anymore", status: 409 },
-  already_answered: { message: "You already answered this question", status: 409 },
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {

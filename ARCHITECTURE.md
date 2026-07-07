@@ -347,7 +347,19 @@ Quiz." Deliberately kept separate rather than bolted onto
   tallying votes, starting the next round, resolving the tiebreak) guards
   its `updateMany` with a `WHERE status = ... AND ...` condition matching
   the state it read, so if two requests race to trigger the same
-  transition, only one actually applies it.
+  transition, only one actually applies it. Separately, `castVote` and
+  `submitAnswer` re-read the *other* players' state fresh after writing the
+  current player's own vote/answer, rather than reusing the snapshot
+  fetched at the top of the request — two votes (or two answers) landing
+  close together could otherwise each see the other as not-yet-recorded
+  (both read before either write completed) and neither would trigger the
+  tally/advance, permanently stalling the round. `submitAnswer` also treats
+  a duplicate submission for a question the player already has an answer
+  for as a no-op *before* checking whether it's still the current
+  question — a request that's merely arrived late (e.g. a double-click
+  that raced the round advancing past that question) would otherwise
+  surface a confusing "that isn't the current question anymore" error for
+  something that, from the player's perspective, already succeeded.
 - **No cleanup job.** `GameSession`/`GamePlayer` rows accumulate forever;
   there's no expiry or archival. Fine at low volume, worth adding a sweep
   before this sees real traffic.
