@@ -86,6 +86,14 @@ model GameSession {
   code                 String    @unique
   // "lobby" | "voting" | "playing" | "round-summary" | "tiebreak" | "completed"
   status               String    @default("lobby")
+  // "regular" | "party" — "party" unlocks the opt-in drinking-game challenge
+  // between rounds; set once at creation, fixed for the life of the session.
+  mode                 String    @default("regular")
+  // Question ids drawn for any player's challenge so far this game, across
+  // all rounds/players — kept separate from questionIds (the main-round
+  // draw) so a challenge never repeats a question already used anywhere in
+  // this session.
+  usedChallengeQuestionIds String[] @default([])
   // The 3 tags offered to players during the "voting" phase, for the
   // current round.
   categoryChoices      String[]  @default([])
@@ -157,6 +165,17 @@ model GamePlayer {
   // question — scored on read with quiz-core's scoreQuiz() against a
   // synthetic Quiz built from questionIds, not stored redundantly here.
   answers   Json        @default("[]")
+  // Points earned from completed drinking-game challenges (party mode
+  // only) — added on top of the quiz-core score, since challenge
+  // questions aren't part of the main round and quiz-core has no concept
+  // of them.
+  bonusPoints Int       @default(0)
+  // Current/last challenge attempt for this player, or null if they've
+  // never opted in. Shape: { roundIndex, questionIds, answers,
+  // questionStartedAt, completed, correct }. Only meaningful when its
+  // roundIndex matches the session's current roundIndex — otherwise it's
+  // a stale attempt from a round that already ended.
+  challenge Json?
   joinedAt  DateTime    @default(now())
 
   @@unique([sessionId, seat])

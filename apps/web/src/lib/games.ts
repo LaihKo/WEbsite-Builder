@@ -10,8 +10,30 @@ export const QUESTIONS_PER_ROUND = 5;
 export const TOTAL_ROUNDS = 3;
 export const QUESTION_TIMER_SECONDS = 30;
 export const TIEBREAK_TIMER_SECONDS = 45;
+export const QUESTIONS_PER_CHALLENGE = 3;
 
 export type GameStatus = "lobby" | "voting" | "playing" | "round-summary" | "tiebreak" | "completed";
+export type GameMode = "regular" | "party";
+export type ChallengeStatus = "none" | "in-progress" | "success" | "failed";
+
+/** Persisted shape of GamePlayer.challenge — a private, per-player drinking-game side quest. */
+interface ChallengeState {
+  roundIndex: number;
+  questionIds: string[];
+  answers: Answer[];
+  questionStartedAt: string;
+  completed: boolean;
+  correct: boolean | null;
+}
+
+export interface PlayerChallengeView {
+  questionIndex: number;
+  totalQuestions: number;
+  currentQuestion: PublicQuestion | null;
+  secondsRemaining: number | null;
+  completed: boolean;
+  correct: boolean | null;
+}
 
 export interface PlayerView {
   seat: number;
@@ -22,6 +44,7 @@ export interface PlayerView {
   scorePoints: number;
   inTiebreak: boolean;
   isWinner: boolean;
+  challengeStatus: ChallengeStatus;
 }
 
 export interface TiebreakGuessView {
@@ -41,6 +64,7 @@ export interface TiebreakView {
 
 export interface GameStateView {
   code: string;
+  mode: GameMode;
   status: GameStatus;
   players: PlayerView[];
   categoryChoices: string[];
@@ -58,7 +82,12 @@ export interface GameStateView {
   questionSecondsRemaining: number | null;
   tiebreak: TiebreakView | null;
   winnerSeats: number[];
-  you: { seat: number; votedTag: string | null; isTiebreakParticipant: boolean } | null;
+  you: {
+    seat: number;
+    votedTag: string | null;
+    isTiebreakParticipant: boolean;
+    challenge: PlayerChallengeView | null;
+  } | null;
   isHost: boolean;
 }
 
@@ -103,6 +132,18 @@ async function drawQuestionIdsForTag(tag: string, excludeIds: string[]): Promise
     select: { id: true },
   });
   return shuffle(questions.map((q) => q.id)).slice(0, QUESTIONS_PER_ROUND);
+}
+
+/** Random questions from anywhere in the archive (any category), for a drinking-game challenge. */
+async function drawChallengeQuestionIds(excludeIds: string[]): Promise<string[]> {
+  const questions = await prisma.question.findMany({
+    // Untagged questions (e.g. the fixed "Test Example" quiz) are kept out
+    // of the main category draw on purpose — exclude them here too so a
+    // challenge can't surface content that was never meant for party mode.
+    where: { id: { notIn: excludeIds }, tags: { isEmpty: false } },
+    select: { id: true },
+  });
+  return shuffle(questions.map((q) => q.id)).slice(0, QUESTIONS_PER_CHALLENGE);
 }
 
 async function pickRandomTiebreakerQuestion() {
@@ -162,11 +203,15 @@ function fetchSessionWithPlayers(code: string) {
   });
 }
 
-export async function createGame(hostName: string): Promise<{ code: string; playerId: string }> {
+export async function createGame(
+  hostName: string,
+  mode: GameMode = "regular",
+): Promise<{ code: string; playerId: string }> {
   const code = await generateUniqueGameCode();
   const session = await prisma.gameSession.create({
     data: {
       code,
+      mode,
       players: { create: [{ seat: 1, name: hostName.trim() || "Player 1" }] },
     },
     include: { players: true },
@@ -376,12 +421,121 @@ export async function advanceRound(code: string, playerId: string): Promise<Acti
   return { ok: true };
 }
 
+/** Host-turned-drinking-game side quest: opt in for a shot at +1 bonus point between rounds. Party mode only. */
+export async function optIntoChallenge(code: string, playerId: string): Promise<ActionResult> {
+  const session = await fetchSessionWithPlayers(code);
+  if (!session) return { ok: false, error: "not_found" };
+  if (session.mode !== "party") return { ok: false, error: "not_party_mode" };
+  if (session.status !== "round-summary") return { ok: false, error: "not_round_summary" };
+  const player = session.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, error: "not_in_game" };
+
+  const existing = player.challenge as unknown as ChallengeState | null;
+  if (existing && existing.roundIndex === session.roundIndex) {
+    return { ok: true }; // idempotent re-click/retry
+  }
+
+  const excludeIds = [...session.questionIds, ...session.usedChallengeQuestionIds];
+  const questionIds = await drawChallengeQuestionIds(excludeIds);
+  if (questionIds.length === 0) return { ok: false, error: "no_questions_available" };
+
+  const challenge: ChallengeState = {
+    roundIndex: session.roundIndex,
+    questionIds,
+    answers: [],
+    questionStartedAt: new Date().toISOString(),
+    completed: false,
+    correct: null,
+  };
+
+  await prisma.$transaction([
+    prisma.gamePlayer.update({ where: { id: playerId }, data: { challenge: challenge as object } }),
+    prisma.gameSession.update({
+      where: { id: session.id },
+      data: { usedChallengeQuestionIds: [...session.usedChallengeQuestionIds, ...questionIds] },
+    }),
+  ]);
+
+  return { ok: true };
+}
+
+export async function submitChallengeAnswer(
+  code: string,
+  playerId: string,
+  questionId: string,
+  selectedOptionId: string,
+): Promise<ActionResult> {
+  const session = await prisma.gameSession.findUnique({ where: { code }, include: { players: true } });
+  if (!session) return { ok: false, error: "not_found" };
+  const player = session.players.find((p) => p.id === playerId);
+  if (!player) return { ok: false, error: "not_in_game" };
+
+  const challenge = player.challenge as unknown as ChallengeState | null;
+  if (!challenge || challenge.roundIndex !== session.roundIndex || challenge.completed) {
+    return { ok: false, error: "no_active_challenge" };
+  }
+  if (session.status !== "round-summary") return { ok: false, error: "not_round_summary" };
+
+  // Duplicate/retried submission for a question already recorded is a
+  // harmless no-op, same reasoning as submitAnswer above.
+  if (challenge.answers.some((a) => a.questionId === questionId)) {
+    return { ok: true };
+  }
+
+  const currentQuestionId = challenge.questionIds[challenge.answers.length];
+  if (questionId !== currentQuestionId) return { ok: false, error: "not_current_question" };
+
+  if (Date.now() - new Date(challenge.questionStartedAt).getTime() > QUESTION_TIMER_SECONDS * 1000) {
+    // Timer already ran out server-side — fail the challenge rather than
+    // accept a late answer racing the timeout.
+    await prisma.gamePlayer.update({
+      where: { id: playerId },
+      data: { challenge: { ...challenge, completed: true, correct: false } as object },
+    });
+    return { ok: false, error: "challenge_expired" };
+  }
+
+  const updatedAnswers: Answer[] = [...challenge.answers, { questionId, selectedOptionId }];
+  const isLastQuestion = updatedAnswers.length >= challenge.questionIds.length;
+
+  if (!isLastQuestion) {
+    await prisma.gamePlayer.update({
+      where: { id: playerId },
+      data: {
+        challenge: {
+          ...challenge,
+          answers: updatedAnswers,
+          questionStartedAt: new Date().toISOString(),
+        } as object,
+      },
+    });
+    return { ok: true };
+  }
+
+  const questions = await prisma.question.findMany({
+    where: { id: { in: challenge.questionIds } },
+    select: { id: true, correctOptionId: true },
+  });
+  const correctOptionById = new Map(questions.map((q) => [q.id, q.correctOptionId]));
+  const allCorrect = updatedAnswers.every((a) => correctOptionById.get(a.questionId) === a.selectedOptionId);
+
+  await prisma.gamePlayer.update({
+    where: { id: playerId },
+    data: {
+      challenge: { ...challenge, answers: updatedAnswers, completed: true, correct: allCorrect } as object,
+      bonusPoints: allCorrect ? { increment: 1 } : undefined,
+    },
+  });
+
+  return { ok: true };
+}
+
 async function finalizeGame(session: SessionWithPlayers): Promise<void> {
   const quiz = await buildQuizFromQuestionIds(session.id, session.questionIds);
   const scoreBySeat = new Map(
     session.players.map((p) => {
       const answers = (p.answers as unknown as Answer[]) ?? [];
-      return [p.seat, scoreQuiz(quiz, answers).scorePoints] as const;
+      return [p.seat, scoreQuiz(quiz, answers).scorePoints + p.bonusPoints] as const;
     }),
   );
   const topScore = Math.max(...scoreBySeat.values());
@@ -506,9 +660,38 @@ export async function getGameState(code: string, viewerPlayerId?: string): Promi
 
   const viewer = viewerPlayerId ? session.players.find((p) => p.id === viewerPlayerId) : undefined;
 
+  // The viewer's own challenge is self-healed lazily on their own poll (only
+  // they can act on it, so no other viewer's poll needs to know about the
+  // timeout) — mirrors the session-wide self-healing loops above, just
+  // scoped to one player's private state instead of the shared session.
+  let viewerChallenge: ChallengeState | null = null;
+  if (viewer) {
+    const raw = viewer.challenge as unknown as ChallengeState | null;
+    if (raw && raw.roundIndex === session.roundIndex) {
+      viewerChallenge = raw;
+      if (
+        !viewerChallenge.completed &&
+        session.status === "round-summary" &&
+        Date.now() - new Date(viewerChallenge.questionStartedAt).getTime() > QUESTION_TIMER_SECONDS * 1000
+      ) {
+        viewerChallenge = { ...viewerChallenge, completed: true, correct: false };
+        await prisma.gamePlayer.update({ where: { id: viewer.id }, data: { challenge: viewerChallenge as object } });
+      }
+    }
+  }
+
   const players: PlayerView[] = session.players.map((p) => {
     const answers = (p.answers as unknown as Answer[]) ?? [];
     const scored = quiz ? scoreQuiz(quiz, answers) : null;
+    const challenge = p.id === viewer?.id ? viewerChallenge : (p.challenge as unknown as ChallengeState | null);
+    const challengeStatus: ChallengeStatus =
+      !challenge || challenge.roundIndex !== session.roundIndex
+        ? "none"
+        : !challenge.completed
+          ? "in-progress"
+          : challenge.correct
+            ? "success"
+            : "failed";
     return {
       seat: p.seat,
       name: p.name,
@@ -516,11 +699,37 @@ export async function getGameState(code: string, viewerPlayerId?: string): Promi
       hasAnsweredCurrent:
         session.status === "playing" ? answers.some((a) => a.questionId === currentQuestionId) : false,
       correctCount: scored?.correctCount ?? 0,
-      scorePoints: scored?.scorePoints ?? 0,
+      scorePoints: (scored?.scorePoints ?? 0) + p.bonusPoints,
       inTiebreak: session.tiebreakSeats.includes(p.seat),
       isWinner: session.winnerSeats.includes(p.seat),
+      challengeStatus,
     };
   });
+
+  let youChallenge: PlayerChallengeView | null = null;
+  if (viewer && viewerChallenge) {
+    let currentQuestion: PublicQuestion | null = null;
+    if (!viewerChallenge.completed) {
+      const challengeQuiz = await buildQuizFromQuestionIds(session.id, viewerChallenge.questionIds);
+      const challengePublicQuiz = toPublicQuiz(challengeQuiz);
+      const currentId = viewerChallenge.questionIds[viewerChallenge.answers.length];
+      currentQuestion = challengePublicQuiz.questions.find((q) => q.id === currentId) ?? null;
+    }
+    youChallenge = {
+      questionIndex: viewerChallenge.answers.length,
+      totalQuestions: viewerChallenge.questionIds.length,
+      currentQuestion,
+      secondsRemaining: viewerChallenge.completed
+        ? null
+        : Math.max(
+            0,
+            QUESTION_TIMER_SECONDS -
+              Math.floor((Date.now() - new Date(viewerChallenge.questionStartedAt).getTime()) / 1000),
+          ),
+      completed: viewerChallenge.completed,
+      correct: viewerChallenge.correct,
+    };
+  }
 
   const questionSecondsRemaining =
     session.status === "playing" && session.questionStartedAt
@@ -552,6 +761,7 @@ export async function getGameState(code: string, viewerPlayerId?: string): Promi
 
   return {
     code: session.code,
+    mode: session.mode as GameMode,
     status: session.status as GameStatus,
     players,
     categoryChoices: session.categoryChoices,
@@ -575,6 +785,7 @@ export async function getGameState(code: string, viewerPlayerId?: string): Promi
           seat: viewer.seat,
           votedTag: viewer.votedTag,
           isTiebreakParticipant: session.tiebreakSeats.includes(viewer.seat),
+          challenge: youChallenge,
         }
       : null,
     isHost: viewer?.seat === 1,

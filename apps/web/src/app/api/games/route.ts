@@ -1,4 +1,4 @@
-import { createGame } from "@/lib/games";
+import { createGame, type GameMode } from "@/lib/games";
 import { getClientKey, isRateLimited } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
@@ -13,9 +13,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Ugyldig JSON-body" }, { status: 400 });
   }
 
-  const name = (body as { name?: unknown } | null)?.name;
+  const { name, mode } = (body as { name?: unknown; mode?: unknown } | null) ?? {};
   const hostName = typeof name === "string" ? name.slice(0, 40) : "";
+  const gameMode: GameMode = mode === "party" ? "party" : "regular";
 
-  const { code, playerId } = await createGame(hostName);
+  const { code, playerId } = await createGame(hostName, gameMode);
   return Response.json({ code, playerId, seat: 1 }, { status: 201 });
 }

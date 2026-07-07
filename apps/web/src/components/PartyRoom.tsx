@@ -8,6 +8,9 @@ import { CountdownRing } from "./CountdownRing";
 const POLL_INTERVAL_MS = 1500;
 const QUESTION_TIMER_SECONDS = 30;
 const TIEBREAK_TIMER_SECONDS = 45;
+const QUESTIONS_PER_CHALLENGE = 3;
+
+type ChallengeStatus = "none" | "in-progress" | "success" | "failed";
 
 interface PlayerView {
   seat: number;
@@ -18,6 +21,7 @@ interface PlayerView {
   scorePoints: number;
   inTiebreak: boolean;
   isWinner: boolean;
+  challengeStatus: ChallengeStatus;
 }
 
 interface PublicOption {
@@ -47,8 +51,18 @@ interface TiebreakView {
   guesses: TiebreakGuessView[];
 }
 
+interface ChallengeView {
+  questionIndex: number;
+  totalQuestions: number;
+  currentQuestion: PublicQuestion | null;
+  secondsRemaining: number | null;
+  completed: boolean;
+  correct: boolean | null;
+}
+
 interface GameStateView {
   code: string;
+  mode: "regular" | "party";
   status: "lobby" | "voting" | "playing" | "round-summary" | "tiebreak" | "completed";
   players: PlayerView[];
   categoryChoices: string[];
@@ -64,7 +78,12 @@ interface GameStateView {
   questionSecondsRemaining: number | null;
   tiebreak: TiebreakView | null;
   winnerSeats: number[];
-  you: { seat: number; votedTag: string | null; isTiebreakParticipant: boolean } | null;
+  you: {
+    seat: number;
+    votedTag: string | null;
+    isTiebreakParticipant: boolean;
+    challenge: ChallengeView | null;
+  } | null;
   isHost: boolean;
 }
 
@@ -87,7 +106,10 @@ export function PartyRoom({ code }: { code: string }) {
   const [actionPending, setActionPending] = useState(false);
   const [questionSecondsLeft, setQuestionSecondsLeft] = useState<number | null>(null);
   const [tiebreakSecondsLeft, setTiebreakSecondsLeft] = useState<number | null>(null);
+  const [challengeSecondsLeft, setChallengeSecondsLeft] = useState<number | null>(null);
+  const [challengeOptionId, setChallengeOptionId] = useState<string | null>(null);
   const lastQuestionId = useRef<string | null>(null);
+  const lastChallengeQuestionId = useRef<string | null>(null);
 
   useEffect(() => {
     Promise.resolve().then(() => setPlayerId(loadPlayerId(code)));
@@ -105,6 +127,7 @@ export function PartyRoom({ code }: { code: string }) {
         setState(data);
         setQuestionSecondsLeft(data.questionSecondsRemaining);
         setTiebreakSecondsLeft(data.tiebreak?.secondsRemaining ?? null);
+        setChallengeSecondsLeft(data.you?.challenge?.secondsRemaining ?? null);
       });
     });
   }, [code, playerId]);
@@ -122,6 +145,7 @@ export function PartyRoom({ code }: { code: string }) {
     const interval = setInterval(() => {
       setQuestionSecondsLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
       setTiebreakSecondsLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
+      setChallengeSecondsLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : prev));
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -133,6 +157,14 @@ export function PartyRoom({ code }: { code: string }) {
       setSelectedOptionId(null);
     }
   }, [state?.currentQuestion?.id]);
+
+  useEffect(() => {
+    const currentId = state?.you?.challenge?.currentQuestion?.id ?? null;
+    if (currentId !== lastChallengeQuestionId.current) {
+      lastChallengeQuestionId.current = currentId;
+      setChallengeOptionId(null);
+    }
+  }, [state?.you?.challenge?.currentQuestion?.id]);
 
   async function handleJoin(event: FormEvent) {
     event.preventDefault();
@@ -195,6 +227,20 @@ export function PartyRoom({ code }: { code: string }) {
 
   function handleAdvanceRound() {
     postAction("advance-round", { playerId }, "Kunne ikke fortsætte");
+  }
+
+  function handleOptIntoChallenge() {
+    postAction("challenge/opt-in", { playerId }, "Kunne ikke deltage i udfordringen");
+  }
+
+  function handleSubmitChallengeAnswer() {
+    const questionId = state?.you?.challenge?.currentQuestion?.id;
+    if (!questionId || !challengeOptionId) return;
+    postAction(
+      "challenge/answer",
+      { playerId, questionId, selectedOptionId: challengeOptionId },
+      "Kunne ikke indsende svar",
+    );
   }
 
   function handleSubmitTiebreak(event: FormEvent) {
@@ -410,7 +456,20 @@ export function PartyRoom({ code }: { code: string }) {
           <h2 className="font-display text-[30px] font-extrabold tracking-tight">
             Runde {state.roundIndex + 1} færdig!
           </h2>
-          <Scoreboard players={state.players} />
+          <Scoreboard players={state.players} showChallengeBadges={state.mode === "party"} />
+
+          {state.mode === "party" && (
+            <ChallengePanel
+              challenge={state.you?.challenge ?? null}
+              secondsLeft={challengeSecondsLeft}
+              selectedOptionId={challengeOptionId}
+              onSelectOption={setChallengeOptionId}
+              onOptIn={handleOptIntoChallenge}
+              onSubmit={handleSubmitChallengeAnswer}
+              actionPending={actionPending}
+            />
+          )}
+
           {state.isHost ? (
             <button onClick={handleAdvanceRound} disabled={actionPending} className={`w-full ${primaryButton}`}>
               {isLastRound ? "Se det endelige resultat" : "Start næste runde"}
@@ -563,7 +622,15 @@ function TiebreakReveal({
   );
 }
 
-function Scoreboard({ players, winnerSeats }: { players: PlayerView[]; winnerSeats?: number[] }) {
+function Scoreboard({
+  players,
+  winnerSeats,
+  showChallengeBadges = false,
+}: {
+  players: PlayerView[];
+  winnerSeats?: number[];
+  showChallengeBadges?: boolean;
+}) {
   const ranked = players.slice().sort((a, b) => b.scorePoints - a.scorePoints);
   const topScore = ranked[0]?.scorePoints;
   return (
@@ -581,6 +648,13 @@ function Scoreboard({ players, winnerSeats }: { players: PlayerView[]; winnerSea
             <span className="flex items-center gap-2.5 text-[15px]">
               <span className="font-mono text-xs text-faint">{index + 1}</span>
               <span className="font-medium text-foreground">{player.name}</span>
+              {showChallengeBadges && player.challengeStatus !== "none" && (
+                <span className="text-xs" title="Udfordring">
+                  {player.challengeStatus === "in-progress" && "🍻"}
+                  {player.challengeStatus === "success" && "🍻✅"}
+                  {player.challengeStatus === "failed" && "🍻❌"}
+                </span>
+              )}
               {(isWinner || isLeader) && (
                 <span className="text-xs font-semibold text-accent-2">{isWinner ? "vinder" : "fører"}</span>
               )}
@@ -592,5 +666,111 @@ function Scoreboard({ players, winnerSeats }: { players: PlayerView[]; winnerSea
         );
       })}
     </ul>
+  );
+}
+
+function ChallengePanel({
+  challenge,
+  secondsLeft,
+  selectedOptionId,
+  onSelectOption,
+  onOptIn,
+  onSubmit,
+  actionPending,
+}: {
+  challenge: ChallengeView | null;
+  secondsLeft: number | null;
+  selectedOptionId: string | null;
+  onSelectOption: (id: string) => void;
+  onOptIn: () => void;
+  onSubmit: () => void;
+  actionPending: boolean;
+}) {
+  if (!challenge) {
+    return (
+      <div className="flex w-full flex-col items-center gap-3 rounded-2xl border-[1.5px] border-dashed border-accent-2/30 bg-accent-2/5 p-5 text-center">
+        <span className="text-2xl">🍻</span>
+        <p className="text-sm leading-snug text-muted">
+          Udfordring: {QUESTIONS_PER_CHALLENGE} spørgsmål — svar rigtigt på alle og få et ekstra point. Kræver 2
+          slurke for at deltage.
+        </p>
+        <button
+          onClick={onOptIn}
+          disabled={actionPending}
+          className="w-full rounded-xl bg-accent-2 px-5 py-3.5 font-display font-bold text-accent-2-foreground transition enabled:hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Deltag i udfordringen
+        </button>
+      </div>
+    );
+  }
+
+  if (challenge.completed) {
+    return (
+      <div
+        className={`flex w-full flex-col items-center gap-1 rounded-2xl border-[1.5px] p-5 text-center ${
+          challenge.correct ? "border-accent-2 bg-accent-2/10" : "border-border bg-surface"
+        }`}
+      >
+        <span className="text-2xl">{challenge.correct ? "✅" : "❌"}</span>
+        <div className="font-display text-lg font-bold">
+          {challenge.correct ? "Rigtigt! +1 bonuspoint" : "Ikke helt — ingen bonus denne gang"}
+        </div>
+      </div>
+    );
+  }
+
+  if (!challenge.currentQuestion) return null;
+
+  return (
+    <div className="flex w-full flex-col gap-4 rounded-2xl border-[1.5px] border-accent-2/30 bg-accent-2/5 p-5">
+      <div className="flex items-center justify-between font-mono text-[11px] tracking-wide text-faint">
+        <span>🍻 UDFORDRING</span>
+        <span>
+          SPM {challenge.questionIndex + 1}/{challenge.totalQuestions}
+        </span>
+      </div>
+      <div className="flex justify-center">
+        <CountdownRing seconds={secondsLeft} max={QUESTION_TIMER_SECONDS} size={90} />
+      </div>
+      <h3 className="text-center font-display text-lg font-bold leading-tight">{challenge.currentQuestion.prompt}</h3>
+      <div className="flex flex-col gap-2">
+        {challenge.currentQuestion.options.map((option) => {
+          const selected = selectedOptionId === option.id;
+          return (
+            <label
+              key={option.id}
+              className={`flex cursor-pointer items-center gap-3 rounded-xl border-[1.5px] px-4 py-3 text-[15px] transition ${
+                selected ? "border-accent-2 bg-accent-2/15" : "border-border bg-surface"
+              }`}
+            >
+              <input
+                type="radio"
+                name="challenge-option"
+                value={option.id}
+                checked={selected}
+                onChange={() => onSelectOption(option.id)}
+                className="sr-only"
+              />
+              <span
+                className={`flex size-[20px] shrink-0 items-center justify-center rounded-full border-2 ${
+                  selected ? "border-accent-2" : "border-white/30"
+                }`}
+              >
+                {selected && <span className="size-2 rounded-full bg-accent-2" />}
+              </span>
+              <span>{option.text}</span>
+            </label>
+          );
+        })}
+      </div>
+      <button
+        onClick={onSubmit}
+        disabled={actionPending || !selectedOptionId}
+        className="rounded-xl bg-accent-2 px-5 py-3.5 font-display font-bold text-accent-2-foreground transition enabled:hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Indsend
+      </button>
+    </div>
   );
 }
