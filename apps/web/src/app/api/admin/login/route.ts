@@ -4,19 +4,19 @@ import { getClientKey, isRateLimited } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   if (isRateLimited(`admin-login:${getClientKey(request)}`, 5)) {
-    return Response.json({ error: "Too many attempts, try again later" }, { status: 429 });
+    return Response.json({ error: "For mange forsøg, prøv igen senere" }, { status: 429 });
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return Response.json({ error: "Ugyldig JSON-body" }, { status: 400 });
   }
 
   const password = (body as { password?: unknown } | null)?.password;
   if (typeof password !== "string" || !verifyAdminPassword(password)) {
-    return Response.json({ error: "Incorrect password" }, { status: 401 });
+    return Response.json({ error: "Forkert adgangskode" }, { status: 401 });
   }
 
   (await cookies()).set(ADMIN_COOKIE_NAME, createAdminSessionToken(), {

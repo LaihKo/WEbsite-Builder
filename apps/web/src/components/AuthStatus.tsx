@@ -16,7 +16,7 @@ export async function AuthStatus() {
           {session.user.name ?? session.user.email}
         </span>
         <button type="submit" className="underline underline-offset-2">
-          Sign out
+          Log ud
         </button>
       </form>
     );
@@ -31,7 +31,7 @@ export async function AuthStatus() {
         }}
       >
         <button type="submit" className="underline underline-offset-2">
-          Sign in with Google
+          Log ind med Google
         </button>
       </form>
       <form
@@ -41,7 +41,7 @@ export async function AuthStatus() {
         }}
       >
         <button type="submit" className="underline underline-offset-2">
-          Sign in with Facebook
+          Log ind med Facebook
         </button>
       </form>
     </div>

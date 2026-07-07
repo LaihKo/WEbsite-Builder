@@ -1,10 +1,10 @@
 import { advanceRound } from "@/lib/games";
 
 const ERROR_MESSAGES: Record<string, { message: string; status: number }> = {
-  not_found: { message: "Game not found", status: 404 },
-  not_in_game: { message: "You're not in this game", status: 403 },
-  not_host: { message: "Only the host (Player 1) can continue to the next round", status: 403 },
-  not_round_summary: { message: "This game isn't between rounds", status: 409 },
+  not_found: { message: "Spillet blev ikke fundet", status: 404 },
+  not_in_game: { message: "Du er ikke med i dette spil", status: 403 },
+  not_host: { message: "Kun værten (spiller 1) kan gå videre til næste runde", status: 403 },
+  not_round_summary: { message: "Spillet er ikke mellem runder", status: 409 },
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
@@ -14,12 +14,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return Response.json({ error: "Ugyldig JSON-body" }, { status: 400 });
   }
 
   const playerId = (body as { playerId?: unknown } | null)?.playerId;
   if (typeof playerId !== "string" || !playerId) {
-    return Response.json({ error: "playerId is required" }, { status: 400 });
+    return Response.json({ error: "playerId er påkrævet" }, { status: 400 });
   }
 
   const result = await advanceRound(code.toUpperCase(), playerId);

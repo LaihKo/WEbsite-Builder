@@ -21,12 +21,12 @@ export function AdminLoginForm() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Login failed");
+        throw new Error(data?.error ?? "Login mislykkedes");
       }
       router.push("/admin");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Login mislykkedes");
     } finally {
       setSubmitting(false);
     }
@@ -34,11 +34,11 @@ export function AdminLoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Admin login</h1>
+      <h1 className="text-2xl font-semibold">Admin-login</h1>
       <input
         type="password"
         autoFocus
-        placeholder="Password"
+        placeholder="Adgangskode"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
@@ -49,7 +49,7 @@ export function AdminLoginForm() {
         disabled={submitting || !password}
         className="rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
       >
-        {submitting ? "Signing in…" : "Sign in"}
+        {submitting ? "Logger ind…" : "Log ind"}
       </button>
     </form>
   );
