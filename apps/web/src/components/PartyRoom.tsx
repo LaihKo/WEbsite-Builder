@@ -401,14 +401,6 @@ export function PartyRoom({ code }: { code: string }) {
               </button>
             </>
           )}
-
-          <div className="mt-1">
-            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
-              <span className="h-1.5 w-1.5 animate-kz-blink rounded-full bg-accent-2" />
-              Stilling
-            </div>
-            <Scoreboard players={state.players} compact />
-          </div>
         </div>
       )}
 
@@ -571,15 +563,7 @@ function TiebreakReveal({
   );
 }
 
-function Scoreboard({
-  players,
-  winnerSeats,
-  compact = false,
-}: {
-  players: PlayerView[];
-  winnerSeats?: number[];
-  compact?: boolean;
-}) {
+function Scoreboard({ players, winnerSeats }: { players: PlayerView[]; winnerSeats?: number[] }) {
   const ranked = players.slice().sort((a, b) => b.scorePoints - a.scorePoints);
   const topScore = ranked[0]?.scorePoints;
   return (
@@ -592,9 +576,9 @@ function Scoreboard({
             key={player.seat}
             className={`flex items-center justify-between rounded-xl border-[1.5px] px-4 py-3 ${
               isWinner ? "border-accent-2 bg-accent-2/10" : "border-border bg-surface"
-            } ${compact ? "px-3.5 py-2.5" : ""}`}
+            }`}
           >
-            <span className={`flex items-center gap-2.5 ${compact ? "text-sm" : "text-[15px]"}`}>
+            <span className="flex items-center gap-2.5 text-[15px]">
               <span className="font-mono text-xs text-faint">{index + 1}</span>
               <span className="font-medium text-foreground">{player.name}</span>
               {(isWinner || isLeader) && (
