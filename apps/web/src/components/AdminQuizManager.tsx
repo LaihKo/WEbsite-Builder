@@ -50,6 +50,12 @@ async function uploadQuizFile(
 
 const NO_FOLDER = "Ingen mappe";
 
+const adminInput =
+  "rounded-xl border border-border bg-surface px-4 py-2.5 text-foreground outline-none transition-colors focus:border-accent placeholder:text-faint";
+const adminButton =
+  "self-start rounded-xl bg-accent px-5 py-2.5 font-display font-bold text-accent-foreground transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-faint";
+const adminCard = "rounded-xl border border-border bg-surface px-4 py-3";
+
 export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSummaryView[] }) {
   const router = useRouter();
   const [quizzes, setQuizzes] = useState(initialQuizzes);
@@ -166,8 +172,8 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
   return (
     <div className="flex flex-col gap-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Admin</h1>
-        <button onClick={handleLogout} className="text-sm text-zinc-500 hover:underline">
+        <h1 className="font-display text-2xl font-bold">Admin</h1>
+        <button onClick={handleLogout} className="text-sm text-accent hover:underline">
           Log ud
         </button>
       </div>
@@ -180,8 +186,8 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium">Upload en quiz</h2>
-          <a href="/api/admin/template" className="text-sm text-zinc-500 hover:underline">
+          <h2 className="font-display text-lg font-bold">Upload en quiz</h2>
+          <a href="/api/admin/template" className="text-sm text-accent hover:underline">
             Download skabelon (.xlsx)
           </a>
         </div>
@@ -191,31 +197,31 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
             value={title}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setTitle(event.target.value)}
             required
-            className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
+            className={adminInput}
           />
           <input
             placeholder="Beskrivelse (valgfri)"
             value={description}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setDescription(event.target.value)}
-            className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
+            className={adminInput}
           />
           <input
             placeholder="Mappe (valgfri)"
             list="quiz-folder-names"
             value={folder}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setFolder(event.target.value)}
-            className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
+            className={adminInput}
           />
           <input
             type="file"
             accept=".xlsx"
             onChange={(event: ChangeEvent<HTMLInputElement>) => setFile(event.target.files?.[0] ?? null)}
             required
-            className="text-sm"
+            className="text-sm text-muted"
           />
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           {fieldErrors && fieldErrors.length > 0 && (
-            <ul className="list-disc pl-5 text-sm text-red-600 dark:text-red-400">
+            <ul className="list-disc pl-5 text-sm text-danger">
               {fieldErrors.map((fieldError, index) => (
                 <li key={index}>
                   {fieldError.row > 0 ? `Række ${fieldError.row}: ` : ""}
@@ -224,19 +230,15 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
               ))}
             </ul>
           )}
-          <button
-            type="submit"
-            disabled={submitting || !file || !title}
-            className="self-start rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-          >
+          <button type="submit" disabled={submitting || !file || !title} className={adminButton}>
             {submitting ? "Uploader…" : "Upload"}
           </button>
         </form>
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">Bulk-upload</h2>
-        <p className="text-sm text-zinc-500">
+        <h2 className="font-display text-lg font-bold">Bulk-upload</h2>
+        <p className="text-sm text-muted">
           Vælg flere .xlsx-filer på én gang — hver bliver sin egen quiz, opkaldt efter filnavnet.
         </p>
         <form onSubmit={handleBulkUpload} className="flex flex-col gap-3">
@@ -245,7 +247,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
             list="quiz-folder-names"
             value={bulkFolder}
             onChange={(event: ChangeEvent<HTMLInputElement>) => setBulkFolder(event.target.value)}
-            className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
+            className={adminInput}
           />
           <input
             type="file"
@@ -254,13 +256,9 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               setBulkFiles(event.target.files ? Array.from(event.target.files) : [])
             }
-            className="text-sm"
+            className="text-sm text-muted"
           />
-          <button
-            type="submit"
-            disabled={bulkSubmitting || bulkFiles.length === 0}
-            className="self-start rounded-full bg-foreground px-5 py-2 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-          >
+          <button type="submit" disabled={bulkSubmitting || bulkFiles.length === 0} className={adminButton}>
             {bulkSubmitting
               ? `Uploader ${bulkProgress}/${bulkFiles.length}…`
               : bulkFiles.length > 0
@@ -270,10 +268,7 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
           {bulkResults.length > 0 && (
             <ul className="flex flex-col gap-1 text-sm">
               {bulkResults.map((result, index) => (
-                <li
-                  key={index}
-                  className={result.status === "success" ? "text-zinc-500" : "text-red-600 dark:text-red-400"}
-                >
+                <li key={index} className={result.status === "success" ? "text-muted" : "text-danger"}>
                   {result.status === "success" ? "✓" : "✗"} {result.name}
                   {result.message ? ` — ${result.message}` : ""}
                 </li>
@@ -284,15 +279,12 @@ export function AdminQuizManager({ initialQuizzes }: { initialQuizzes: QuizSumma
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">Quizzer ({quizzes.length})</h2>
-        {quizzes.length === 0 && <p className="text-sm text-zinc-500">Ingen quizzer endnu.</p>}
+        <h2 className="font-display text-lg font-bold">Quizzer ({quizzes.length})</h2>
+        {quizzes.length === 0 && <p className="text-sm text-muted">Ingen quizzer endnu.</p>}
         <div className="flex flex-col gap-2">
           {groupedQuizzes.map(([folderName, folderQuizzes]) => (
-            <details
-              key={folderName}
-              className="rounded-lg border border-black/[.08] px-4 py-3 dark:border-white/[.145]"
-            >
-              <summary className="cursor-pointer font-medium">
+            <details key={folderName} className={adminCard}>
+              <summary className="cursor-pointer font-medium text-foreground">
                 {folderName} ({folderQuizzes.length})
               </summary>
               <ul className="mt-3 flex flex-col gap-2">
@@ -330,10 +322,10 @@ function QuizRow({
   }
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-black/[.08] px-4 py-3 dark:border-white/[.145] sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="font-medium">{quiz.title}</p>
-        <p className="text-sm text-zinc-500">{quiz.questionCount} spørgsmål</p>
+        <p className="font-medium text-foreground">{quiz.title}</p>
+        <p className="text-sm text-muted">{quiz.questionCount} spørgsmål</p>
       </div>
       <div className="flex items-center gap-3">
         <input
@@ -341,22 +333,19 @@ function QuizRow({
           list="quiz-folder-names"
           value={moveValue}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setMoveValue(event.target.value)}
-          className="w-40 rounded-lg border border-black/[.08] px-2 py-1 text-sm dark:border-white/[.145] dark:bg-transparent"
+          className="w-40 rounded-lg border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-accent"
         />
         <button
           onClick={handleMoveClick}
           disabled={moving || moveValue === (quiz.folder ?? "")}
-          className="text-sm enabled:hover:underline disabled:opacity-40"
+          className="text-sm text-accent enabled:hover:underline disabled:text-faint"
         >
           Flyt
         </button>
-        <a href={`/quiz/${quiz.id}`} className="text-sm hover:underline">
+        <a href={`/quiz/${quiz.id}`} className="text-sm text-accent hover:underline">
           Tag quizzen
         </a>
-        <button
-          onClick={() => onDelete(quiz.id)}
-          className="text-sm text-red-600 hover:underline dark:text-red-400"
-        >
+        <button onClick={() => onDelete(quiz.id)} className="text-sm text-danger hover:underline">
           Slet
         </button>
       </div>

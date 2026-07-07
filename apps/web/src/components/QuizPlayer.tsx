@@ -98,27 +98,27 @@ export function QuizPlayer({ quizId }: { quizId: string }) {
   }
 
   if (error) {
-    return <p className="text-red-600 dark:text-red-400">{error}</p>;
+    return <p className="text-danger">{error}</p>;
   }
 
   if (!quiz || !quizState) {
-    return <p className="text-zinc-500">Indlæser quiz…</p>;
+    return <p className="text-muted">Indlæser quiz…</p>;
   }
 
   if (quizState.status === "completed") {
     if (submitting || !result) {
-      return <p className="text-zinc-500">Bedømmer…</p>;
+      return <p className="text-muted">Bedømmer…</p>;
     }
     return (
       <div className="flex flex-col items-center gap-4 text-center">
-        <h2 className="text-2xl font-semibold">Quiz gennemført</h2>
-        <p className="text-lg">
+        <h2 className="font-display text-2xl font-bold">Quiz gennemført</h2>
+        <p className="text-lg text-foreground">
           {result.correctCount} / {result.totalQuestions} rigtige (
           {result.percentage}%)
         </p>
         {recentAttempts && recentAttempts.length > 1 && (
-          <div className="text-sm text-zinc-500">
-            <p className="mb-1 font-medium">Seneste forsøg</p>
+          <div className="text-sm text-muted">
+            <p className="mb-1 font-medium text-foreground">Seneste forsøg</p>
             <ul className="flex flex-col gap-0.5">
               {recentAttempts.map((attempt) => (
                 <li key={attempt.id}>
@@ -130,8 +130,8 @@ export function QuizPlayer({ quizId }: { quizId: string }) {
           </div>
         )}
         <button
-          className="rounded-full border border-black/[.08] px-5 py-2 transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
           onClick={handleRetry}
+          className="rounded-2xl border border-border bg-surface px-5 py-3.5 font-display font-bold text-foreground transition hover:bg-surface-2"
         >
           Prøv igen
         </button>
@@ -146,36 +146,44 @@ export function QuizPlayer({ quizId }: { quizId: string }) {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6">
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-muted">
         Spørgsmål {questionNumber} af {quiz.questions.length}
       </p>
-      <h2 className="text-xl font-medium">{question.prompt}</h2>
-      <div className="flex flex-col gap-2">
-        {question.options.map((option) => (
-          <label
-            key={option.id}
-            className={`cursor-pointer rounded-lg border px-4 py-3 transition-colors ${
-              selectedOptionId === option.id
-                ? "border-foreground bg-black/[.04] dark:bg-white/[.08]"
-                : "border-black/[.08] dark:border-white/[.145]"
-            }`}
-          >
-            <input
-              type="radio"
-              name={question.id}
-              value={option.id}
-              checked={selectedOptionId === option.id}
-              onChange={() => setSelectedOptionId(option.id)}
-              className="mr-2"
-            />
-            {option.text}
-          </label>
-        ))}
+      <h2 className="font-display text-xl font-bold">{question.prompt}</h2>
+      <div className="flex flex-col gap-2.5">
+        {question.options.map((option) => {
+          const selected = selectedOptionId === option.id;
+          return (
+            <label
+              key={option.id}
+              className={`flex cursor-pointer items-center gap-3 rounded-xl border-[1.5px] px-4 py-4 text-[17px] transition ${
+                selected ? "border-accent bg-accent/15" : "border-border bg-surface"
+              }`}
+            >
+              <input
+                type="radio"
+                name={question.id}
+                value={option.id}
+                checked={selected}
+                onChange={() => setSelectedOptionId(option.id)}
+                className="sr-only"
+              />
+              <span
+                className={`flex size-[22px] shrink-0 items-center justify-center rounded-full border-2 ${
+                  selected ? "border-accent" : "border-white/30"
+                }`}
+              >
+                {selected && <span className="size-2.5 rounded-full bg-accent" />}
+              </span>
+              <span>{option.text}</span>
+            </label>
+          );
+        })}
       </div>
       <button
-        className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-        disabled={!selectedOptionId}
         onClick={handleSubmit}
+        disabled={!selectedOptionId}
+        className="rounded-2xl bg-accent px-5 py-4 font-display text-lg font-bold text-accent-foreground shadow-[0_14px_30px_-12px_var(--accent)] transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-faint disabled:shadow-none"
       >
         {questionNumber === quiz.questions.length ? "Afslut" : "Næste"}
       </button>

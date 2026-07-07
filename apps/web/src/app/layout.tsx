@@ -36,7 +36,7 @@ export default function RootLayout({
       className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="flex items-center justify-end border-b border-black/[.08] px-6 py-3 dark:border-white/[.145]">
+        <header className="flex items-center justify-end border-b border-border px-6 py-3">
           <AuthStatus />
         </header>
         {children}
