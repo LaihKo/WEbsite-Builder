@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { clearPlayerId, loadPlayerId, savePlayerId } from "@/lib/partyStorage";
+import { CountdownRing } from "./CountdownRing";
 
 const POLL_INTERVAL_MS = 1500;
+const QUESTION_TIMER_SECONDS = 30;
+const TIEBREAK_TIMER_SECONDS = 45;
 
 interface PlayerView {
   seat: number;
@@ -64,6 +67,11 @@ interface GameStateView {
   you: { seat: number; votedTag: string | null; isTiebreakParticipant: boolean } | null;
   isHost: boolean;
 }
+
+const primaryButton =
+  "rounded-2xl bg-accent px-5 py-4 font-display text-lg font-bold text-accent-foreground shadow-[0_14px_30px_-12px_var(--accent)] transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-faint disabled:shadow-none";
+const textInput =
+  "rounded-2xl border border-border bg-surface px-4 py-4 text-foreground outline-none transition-colors focus:border-accent placeholder:text-faint";
 
 export function PartyRoom({ code }: { code: string }) {
   const router = useRouter();
@@ -204,10 +212,10 @@ export function PartyRoom({ code }: { code: string }) {
   if (notFound) {
     return (
       <div className="flex flex-col items-center gap-4 text-center">
-        <p className="text-zinc-500">
+        <p className="text-muted">
           Spillet <span className="font-mono">{code}</span> findes ikke (eller er slut).
         </p>
-        <button onClick={() => router.push("/party")} className="text-sm hover:underline">
+        <button onClick={() => router.push("/party")} className="text-sm text-accent hover:underline">
           Tilbage til start
         </button>
       </div>
@@ -217,7 +225,7 @@ export function PartyRoom({ code }: { code: string }) {
   if (!playerId) {
     return (
       <form onSubmit={handleJoin} className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold">
+        <h1 className="font-display text-xl font-bold">
           Deltag i spil <span className="font-mono">{code}</span>
         </h1>
         <input
@@ -225,14 +233,10 @@ export function PartyRoom({ code }: { code: string }) {
           value={joinName}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setJoinName(event.target.value)}
           autoFocus
-          className="rounded-lg border border-black/[.08] px-4 py-2 dark:border-white/[.145] dark:bg-transparent"
+          className={textInput}
         />
-        {joinError && <p className="text-sm text-red-600 dark:text-red-400">{joinError}</p>}
-        <button
-          type="submit"
-          disabled={joining || !joinName.trim()}
-          className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-        >
+        {joinError && <p className="text-sm text-danger">{joinError}</p>}
+        <button type="submit" disabled={joining || !joinName.trim()} className={primaryButton}>
           Deltag
         </button>
       </form>
@@ -240,7 +244,7 @@ export function PartyRoom({ code }: { code: string }) {
   }
 
   if (!state) {
-    return <p className="text-zinc-500">Indlæser…</p>;
+    return <p className="text-muted">Indlæser…</p>;
   }
 
   const you = state.players.find((p) => p.seat === state.you?.seat) ?? null;
@@ -248,138 +252,179 @@ export function PartyRoom({ code }: { code: string }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {actionError && <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
+      {actionError && <p className="text-sm text-danger">{actionError}</p>}
 
       {state.status === "lobby" && (
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm text-zinc-500">Del denne kode:</p>
-          <p className="text-4xl font-mono font-bold tracking-widest">{code}</p>
-          <ul className="flex w-full flex-col gap-1">
+        <div className="flex flex-col items-center gap-5 text-center">
+          <p className="text-sm text-muted">Del denne kode</p>
+          <p className="font-mono text-5xl font-bold tracking-[0.3em] text-accent-2 [text-shadow:0_0_30px_rgba(198,255,61,.35)]">
+            {code}
+          </p>
+          <ul className="flex w-full flex-col gap-2">
             {Array.from({ length: 6 }, (_, i) => i + 1).map((seat) => {
               const player = state.players.find((p) => p.seat === seat);
               return (
                 <li
                   key={seat}
-                  className={`rounded-lg border px-4 py-2 text-left ${
+                  className={`flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left text-[15px] ${
                     player
-                      ? "border-black/[.08] dark:border-white/[.145]"
-                      : "border-dashed border-black/[.08] text-zinc-400 dark:border-white/[.145]"
+                      ? "border-[1.5px] border-border bg-surface text-foreground"
+                      : "border-[1.5px] border-dashed border-border text-faint"
                   }`}
                 >
+                  {player ? (
+                    <span
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-[9px] font-display font-bold ${
+                        seat === 1 ? "bg-accent-2 text-accent-2-foreground" : "bg-accent text-accent-foreground"
+                      }`}
+                    >
+                      {player.name[0]?.toUpperCase()}
+                    </span>
+                  ) : (
+                    <span className="size-8 shrink-0" />
+                  )}
                   {player ? `${player.name}${seat === 1 ? " (vært)" : ""}` : "venter på spiller…"}
                 </li>
               );
             })}
           </ul>
           {state.isHost ? (
-            <button
-              onClick={handleStart}
-              disabled={actionPending}
-              className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-            >
+            <button onClick={handleStart} disabled={actionPending} className={`w-full ${primaryButton}`}>
               Start afstemning
             </button>
           ) : (
-            <p className="text-sm text-zinc-500">Venter på, at værten starter…</p>
+            <p className="text-sm text-muted">Venter på, at værten starter…</p>
           )}
         </div>
       )}
 
       {state.status === "voting" && (
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm text-zinc-500">
-            Runde {state.roundIndex + 1} af {state.totalRounds}
+        <div className="flex flex-col items-center gap-3 text-center">
+          <p className="font-mono text-[13px] tracking-wide text-accent">
+            RUNDE {state.roundIndex + 1} AF {state.totalRounds}
           </p>
-          <h2 className="text-xl font-semibold">Stem om en kategori</h2>
-          <div className="flex w-full flex-col gap-2">
-            {state.categoryChoices.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => handleVote(tag)}
-                disabled={actionPending || Boolean(state.you?.votedTag)}
-                className={`rounded-lg border px-4 py-3 capitalize transition-colors disabled:cursor-not-allowed ${
-                  state.you?.votedTag === tag
-                    ? "border-foreground bg-black/[.04] dark:bg-white/[.08]"
-                    : "border-black/[.08] enabled:hover:bg-black/[.04] dark:border-white/[.145] dark:enabled:hover:bg-[#1a1a1a]"
-                }`}
-              >
-                {tag.replace(/-/g, " ")}
-              </button>
-            ))}
+          <h2 className="font-display text-[30px] font-extrabold tracking-tight">Stem om en kategori</h2>
+          <div className="flex w-full flex-col gap-2.5">
+            {state.categoryChoices.map((tag) => {
+              const selected = state.you?.votedTag === tag;
+              return (
+                <button
+                  key={tag}
+                  onClick={() => handleVote(tag)}
+                  disabled={actionPending || Boolean(state.you?.votedTag)}
+                  className={`flex items-center justify-between rounded-2xl border-[1.5px] px-5 py-4 font-display text-lg font-bold capitalize transition disabled:cursor-not-allowed ${
+                    selected
+                      ? "border-accent-2 bg-accent-2/10"
+                      : "border-border bg-surface enabled:hover:bg-surface-2"
+                  }`}
+                >
+                  <span>{tag.replace(/-/g, " ")}</span>
+                  {selected && <span className="text-xl text-accent-2">✓</span>}
+                </button>
+              );
+            })}
           </div>
-          <p className="text-sm text-zinc-500">
-            {state.players.filter((p) => p.hasVoted).length} / {state.players.length} har stemt
-          </p>
+          <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+            <span className="h-1.5 w-1.5 animate-kz-blink rounded-full bg-accent-2" />
+            <span className="font-mono text-foreground">
+              {state.players.filter((p) => p.hasVoted).length} / {state.players.length}
+            </span>{" "}
+            har stemt
+          </div>
         </div>
       )}
 
       {state.status === "playing" && state.currentQuestion && (
-        <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between text-sm text-zinc-500">
-            <p>
-              Runde {state.roundIndex + 1} af {state.totalRounds} —{" "}
-              <span className="capitalize">{state.category?.replace(/-/g, " ")}</span> — spørgsmål{" "}
-              {state.questionIndexInRound + 1} af {state.questionsInCurrentRound}
-            </p>
-            <p className="font-mono tabular-nums">{questionSecondsLeft ?? "–"}s</p>
+        <div className="flex flex-col gap-5">
+          <div className="flex items-center justify-between font-mono text-[11px] tracking-wide text-faint">
+            <span>
+              RUNDE {state.roundIndex + 1}/{state.totalRounds} · {state.category?.replace(/-/g, " ").toUpperCase()}
+            </span>
+            <span>
+              SPM {state.questionIndexInRound + 1}/{state.questionsInCurrentRound}
+            </span>
           </div>
+
+          <div className="flex justify-center">
+            <CountdownRing seconds={questionSecondsLeft} max={QUESTION_TIMER_SECONDS} />
+          </div>
+
           {you?.hasAnsweredCurrent ? (
-            <p className="text-center text-zinc-500">
-              Svar indsendt — venter på {state.players.filter((p) => !p.hasAnsweredCurrent).length}{" "}
-              spiller(e) mere…
-            </p>
+            <div className="flex flex-col items-center gap-2 rounded-2xl border-[1.5px] border-border bg-surface p-5 text-center">
+              <span className="text-2xl">✅</span>
+              <div className="font-display text-lg font-bold">Svar indsendt</div>
+              <div className="text-sm text-muted">
+                Venter på {state.players.filter((p) => !p.hasAnsweredCurrent).length} spiller(e) mere…
+              </div>
+            </div>
           ) : (
             <>
-              <h2 className="text-xl font-medium">{state.currentQuestion.prompt}</h2>
-              <div className="flex flex-col gap-2">
-                {state.currentQuestion.options.map((option) => (
-                  <label
-                    key={option.id}
-                    className={`cursor-pointer rounded-lg border px-4 py-3 transition-colors ${
-                      selectedOptionId === option.id
-                        ? "border-foreground bg-black/[.04] dark:bg-white/[.08]"
-                        : "border-black/[.08] dark:border-white/[.145]"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="option"
-                      value={option.id}
-                      checked={selectedOptionId === option.id}
-                      onChange={() => setSelectedOptionId(option.id)}
-                      className="mr-2"
-                    />
-                    {option.text}
-                  </label>
-                ))}
+              <h2 className="text-center font-display text-[22px] font-bold leading-tight tracking-tight">
+                {state.currentQuestion.prompt}
+              </h2>
+              <div className="flex flex-col gap-2.5">
+                {state.currentQuestion.options.map((option) => {
+                  const selected = selectedOptionId === option.id;
+                  return (
+                    <label
+                      key={option.id}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border-[1.5px] px-4 py-4 text-[17px] transition ${
+                        selected ? "border-accent bg-accent/15" : "border-border bg-surface"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="option"
+                        value={option.id}
+                        checked={selected}
+                        onChange={() => setSelectedOptionId(option.id)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={`flex size-[22px] shrink-0 items-center justify-center rounded-full border-2 ${
+                          selected ? "border-accent" : "border-white/30"
+                        }`}
+                      >
+                        {selected && <span className="size-2.5 rounded-full bg-accent" />}
+                      </span>
+                      <span>{option.text}</span>
+                    </label>
+                  );
+                })}
               </div>
               <button
                 onClick={handleSubmitAnswer}
                 disabled={actionPending || !selectedOptionId}
-                className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
+                className={primaryButton}
               >
                 Indsend
               </button>
             </>
           )}
-          <Scoreboard players={state.players} />
+
+          <div className="mt-1">
+            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
+              <span className="h-1.5 w-1.5 animate-kz-blink rounded-full bg-accent-2" />
+              Stilling
+            </div>
+            <Scoreboard players={state.players} compact />
+          </div>
         </div>
       )}
 
       {state.status === "round-summary" && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <h2 className="text-xl font-semibold">Runde {state.roundIndex + 1} færdig!</h2>
+          <div className="text-4xl">🏁</div>
+          <h2 className="font-display text-[30px] font-extrabold tracking-tight">
+            Runde {state.roundIndex + 1} færdig!
+          </h2>
           <Scoreboard players={state.players} />
           {state.isHost ? (
-            <button
-              onClick={handleAdvanceRound}
-              disabled={actionPending}
-              className="rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-            >
+            <button onClick={handleAdvanceRound} disabled={actionPending} className={`w-full ${primaryButton}`}>
               {isLastRound ? "Se det endelige resultat" : "Start næste runde"}
             </button>
           ) : (
-            <p className="text-sm text-zinc-500">Venter på, at værten fortsætter…</p>
+            <p className="text-sm text-muted">Venter på, at værten fortsætter…</p>
           )}
         </div>
       )}
@@ -400,12 +445,13 @@ export function PartyRoom({ code }: { code: string }) {
 
       {state.status === "completed" && (
         <div className="flex flex-col items-center gap-4 text-center">
-          <h2 className="text-2xl font-semibold">Spillet er slut!</h2>
+          <div className="text-[44px]">🏆</div>
+          <h2 className="font-display text-[30px] font-extrabold tracking-tight">Spillet er slut!</h2>
           {state.tiebreak && (
-            <TiebreakReveal tiebreak={state.tiebreak} players={state.players} />
+            <TiebreakReveal tiebreak={state.tiebreak} players={state.players} winnerSeats={state.winnerSeats} />
           )}
           <Scoreboard players={state.players} winnerSeats={state.winnerSeats} />
-          <button onClick={handlePlayAgain} className="text-sm hover:underline">
+          <button onClick={handlePlayAgain} className="text-sm text-accent hover:underline">
             Spil igen
           </button>
         </div>
@@ -442,18 +488,28 @@ function TiebreakPanel({
 
   return (
     <div className="flex flex-col items-center gap-4 text-center">
-      <p className="text-sm text-zinc-500">
-        {tiedNames} er lige om førstepladsen — nærmeste gæt vinder!
-      </p>
-      <div className="flex items-center justify-between w-full text-sm text-zinc-500">
-        <span>Tiebreaker</span>
-        <span className="font-mono tabular-nums">{secondsLeft ?? "–"}s</span>
+      <div className="inline-flex items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-3.5 py-1.5 text-xs font-bold tracking-wide text-danger">
+        ⚡ OMKAMP
       </div>
-      <h2 className="text-xl font-medium">{tiebreak.prompt}</h2>
+      <p className="text-[15px] leading-snug text-muted">
+        <span className="font-semibold text-accent-2">{tiedNames}</span> er lige om førstepladsen — nærmeste gæt
+        vinder!
+      </p>
+
+      <div className="flex justify-center">
+        <CountdownRing seconds={secondsLeft} max={TIEBREAK_TIMER_SECONDS} size={104} />
+      </div>
+
+      <h2 className="font-display text-xl font-bold leading-tight tracking-tight">{tiebreak.prompt}</h2>
 
       {isParticipant ? (
         hasAnswered ? (
-          <p className="text-zinc-500">Gæt indsendt — venter på {answeredCount < tiebreak.participantSeats.length ? "de andre spillere, der er lige med dig" : "resultatet"}…</p>
+          <div className="flex w-full flex-col gap-1.5 rounded-2xl border-[1.5px] border-border bg-surface p-5 text-left">
+            <div className="font-display text-[17px] font-bold">Gæt indsendt ✅</div>
+            <div className="text-sm text-muted">
+              Venter på {answeredCount < tiebreak.participantSeats.length ? "de andre spillere, der er lige med dig" : "resultatet"}…
+            </div>
+          </div>
         ) : (
           <form onSubmit={onSubmit} className="flex w-full flex-col gap-3">
             <input
@@ -463,61 +519,91 @@ function TiebreakPanel({
               value={guess}
               onChange={(event: ChangeEvent<HTMLInputElement>) => onGuessChange(event.target.value)}
               autoFocus
-              className="rounded-lg border border-black/[.08] px-4 py-2 text-center dark:border-white/[.145] dark:bg-transparent"
+              className={`${textInput} text-center font-mono text-2xl font-bold`}
             />
-            <button
-              type="submit"
-              disabled={submitDisabled || guess.trim() === ""}
-              className="self-center rounded-full bg-foreground px-5 py-3 text-background transition-colors enabled:hover:bg-[#383838] disabled:opacity-40 dark:enabled:hover:bg-[#ccc]"
-            >
+            <button type="submit" disabled={submitDisabled || guess.trim() === ""} className={primaryButton}>
               Indsend gæt
             </button>
           </form>
         )
       ) : (
-        <p className="text-zinc-500">
-          Du er ikke lige med om førstepladsen — du kan følge med, men kun {tiedNames} kan svare på denne.
+        <p className="w-full rounded-2xl border border-dashed border-border bg-[color-mix(in_srgb,var(--surface)_65%,transparent)] p-5 text-left text-sm leading-snug text-muted">
+          👀 Du er ikke lige med om førstepladsen — du kan følge med, men kun{" "}
+          <span className="font-semibold text-accent-2">{tiedNames}</span> kan svare på denne.
         </p>
       )}
     </div>
   );
 }
 
-function TiebreakReveal({ tiebreak, players }: { tiebreak: TiebreakView; players: PlayerView[] }) {
+function TiebreakReveal({
+  tiebreak,
+  players,
+  winnerSeats,
+}: {
+  tiebreak: TiebreakView;
+  players: PlayerView[];
+  winnerSeats: number[];
+}) {
   return (
-    <div className="flex w-full flex-col gap-2 rounded-lg border border-black/[.08] p-4 text-left text-sm dark:border-white/[.145]">
-      <p className="font-medium">Tiebreaker: {tiebreak.prompt}</p>
-      <p className="text-zinc-500">Referencesvar: {tiebreak.answer}</p>
+    <div className="flex w-full flex-col gap-2.5 rounded-2xl border border-border bg-surface p-4 text-left">
+      <p className="text-xs font-semibold uppercase tracking-wide text-faint">Omkamp</p>
+      <p className="text-[13px] leading-snug text-muted">{tiebreak.prompt}</p>
+      <div className="flex items-center justify-between rounded-xl border border-accent-2/25 bg-accent-2/10 px-3.5 py-2.5">
+        <span className="text-[13px] font-semibold text-accent-2">Referencesvar</span>
+        <span className="font-mono text-xl font-bold text-accent-2">{tiebreak.answer}</span>
+      </div>
       <ul className="flex flex-col gap-1">
-        {tiebreak.guesses.map((g) => (
-          <li key={g.seat} className="flex justify-between">
-            <span>{players.find((p) => p.seat === g.seat)?.name ?? `Plads ${g.seat}`}</span>
-            <span className="text-zinc-500">{g.guess ?? "intet gæt"}</span>
-          </li>
-        ))}
+        {tiebreak.guesses.map((g) => {
+          const isClosest = winnerSeats.includes(g.seat) && g.guess !== null;
+          return (
+            <li key={g.seat} className="flex items-center justify-between px-0.5 py-1 text-sm">
+              <span className="flex items-center gap-2">
+                <span>{players.find((p) => p.seat === g.seat)?.name ?? `Plads ${g.seat}`}</span>
+                {isClosest && <span className="text-xs font-semibold text-accent-2">nærmest</span>}
+              </span>
+              <span className="font-mono text-muted">{g.guess ?? "intet gæt"}</span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 }
 
-function Scoreboard({ players, winnerSeats }: { players: PlayerView[]; winnerSeats?: number[] }) {
+function Scoreboard({
+  players,
+  winnerSeats,
+  compact = false,
+}: {
+  players: PlayerView[];
+  winnerSeats?: number[];
+  compact?: boolean;
+}) {
   const ranked = players.slice().sort((a, b) => b.scorePoints - a.scorePoints);
   const topScore = ranked[0]?.scorePoints;
   return (
-    <ul className="flex w-full flex-col gap-1 text-sm">
+    <ul className="flex w-full flex-col gap-1.5">
       {ranked.map((player, index) => {
         const isWinner = winnerSeats ? winnerSeats.includes(player.seat) : false;
         const isLeader = !winnerSeats?.length && topScore > 0 && player.scorePoints === topScore;
         return (
           <li
             key={player.seat}
-            className="flex items-center justify-between rounded-lg border border-black/[.08] px-3 py-2 dark:border-white/[.145]"
+            className={`flex items-center justify-between rounded-xl border-[1.5px] px-4 py-3 ${
+              isWinner ? "border-accent-2 bg-accent-2/10" : "border-border bg-surface"
+            } ${compact ? "px-3.5 py-2.5" : ""}`}
           >
-            <span>
-              {index + 1}. {player.name}
-              {isWinner ? " — vinder" : isLeader ? " — fører" : ""}
+            <span className={`flex items-center gap-2.5 ${compact ? "text-sm" : "text-[15px]"}`}>
+              <span className="font-mono text-xs text-faint">{index + 1}</span>
+              <span className="font-medium text-foreground">{player.name}</span>
+              {(isWinner || isLeader) && (
+                <span className="text-xs font-semibold text-accent-2">{isWinner ? "vinder" : "fører"}</span>
+              )}
             </span>
-            <span className="text-zinc-500">{player.scorePoints} point</span>
+            <span className="font-mono font-bold text-foreground">
+              {player.scorePoints} <span className="text-[11px] font-medium text-faint">point</span>
+            </span>
           </li>
         );
       })}
