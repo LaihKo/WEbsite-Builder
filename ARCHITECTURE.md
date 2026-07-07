@@ -249,10 +249,26 @@ One sheet, one header row, one question per row:
 - Column headers are matched case-insensitively; column *order* doesn't
   matter, only the header text does.
 
+### The uploaded archive is never browsed directly
+
+The public homepage (`apps/web/src/app/page.tsx`) does **not** list the
+uploaded quiz archive — players only ever reach real content by voting on a
+category in Party mode (below), never by picking a named quiz off a list.
+The only quiz linked from the homepage is a single fixed `Quiz` row seeded
+by the `seed_test_example_quiz` migration (id `test-example`, title "Test
+Example", 5 static questions, untagged so it can't be drawn into Party
+mode's category pool) — this exists purely so the single-quiz-taking
+flow (`/quiz/[quizId]`, `QuizPlayer`, scoring, attempts) stays exercisable
+and has something to demo/QA against, not as real content. The underlying
+`/quiz/[quizId]` route and its API are otherwise unchanged and still power
+admin's own "Take" preview link from `/admin` — this is a UI-visibility
+decision (nothing links to the archive), not new access control on the
+route itself.
+
 ## Party mode (multiplayer category-voting game)
 
-A second, separate way to play, alongside the single-player `/quiz/[quizId]`
-flow: 1-6 players each on their own device join a room and play **3 rounds**
+The primary way to play, now that the archive isn't browsable directly (see
+above): 1-6 players each on their own device join a room and play **3 rounds**
 of 5 questions. Each round opens with a vote on 3 random categories; the
 winning category's questions are drawn and played with a 30s-per-question
 timer; a scoreboard is shown between rounds. If 2+ players are tied for the
