@@ -77,22 +77,67 @@ model QuizAttempt {
 // playing one fixed Quiz — deliberately not modeled as a Quiz/QuizAttempt.
 
 model GameSession {
-  id       String @id @default(cuid())
-  code     String @unique
-  // "lobby" | "voting" | "playing" | "completed"
-  status   String @default("lobby")
-  // The 3 tags offered to players during the "voting" phase.
-  categoryChoices String[] @default([])
-  // Winning tag, set once voting resolves.
-  category        String?
-  // Question ids drawn for this session once voting resolves, in play order.
-  questionIds          String[] @default([])
-  currentQuestionIndex Int      @default(0)
-  createdAt            DateTime @default(now())
+  id                   String    @id @default(cuid())
+  code                 String    @unique
+  // "lobby" | "voting" | "playing" | "round-summary" | "tiebreak" | "completed"
+  status               String    @default("lobby")
+  // The 3 tags offered to players during the "voting" phase, for the
+  // current round.
+  categoryChoices      String[]  @default([])
+  // Winning tag for the current round, set once voting resolves.
+  category             String?
+  // Question ids drawn so far, across all rounds played, in play order —
+  // this keeps growing round to round rather than resetting, so scoreQuiz()
+  // can score cumulatively against the full history with no extra bookkeeping.
+  questionIds          String[]  @default([])
+  currentQuestionIndex Int       @default(0)
+  // Index into questionIds where the current round's questions begin — a
+  // round isn't guaranteed to be exactly QUESTIONS_PER_ROUND long (a thin
+  // category tag can have fewer available), so this (not roundIndex *
+  // QUESTIONS_PER_ROUND) is the source of truth for round boundaries.
+  roundStartIndex      Int       @default(0)
+  // When the question at currentQuestionIndex was shown — the answer timer
+  // (QUESTION_TIMER_SECONDS) counts down from this.
+  questionStartedAt    DateTime?
+  // 0-based; a game is TOTAL_ROUNDS rounds of QUESTIONS_PER_ROUND questions.
+  roundIndex           Int       @default(0)
+  // Winning tags from previous rounds, excluded from later rounds' category
+  // choices so the same category isn't offered twice in one game.
+  usedTags             String[]  @default([])
+
+  // Tiebreak: only entered if 2+ players are tied for the top score after
+  // the final round. Set once, resolved once — a game only ever needs at
+  // most one tiebreak question.
+  tiebreakerQuestionId String?
+  tiebreakerQuestion   TiebreakerQuestion? @relation(fields: [tiebreakerQuestionId], references: [id])
+  // Seats of the tied players — only they can submit a guess; everyone else
+  // is a spectator for this phase.
+  tiebreakSeats        Int[]               @default([])
+  // seat (as string key) -> numeric guess.
+  tiebreakAnswers      Json                @default("{}")
+  tiebreakStartedAt    DateTime?
+
+  // Final winning seat(s) once status is "completed" — usually the sole top
+  // scorer, or the tiebreak winner if the top score was tied.
+  winnerSeats Int[] @default([])
+
+  createdAt DateTime @default(now())
 
   players GamePlayer[]
 
   @@index([createdAt])
+}
+
+model TiebreakerQuestion {
+  id        String   @id @default(cuid())
+  // A "closest guess wins" trivia prompt with a definitive (if arbitrary)
+  // numeric answer — used only to break a tie for the top score at the end
+  // of a game, typed in rather than multiple-choice.
+  prompt    String
+  answer    Float
+  createdAt DateTime @default(now())
+
+  gameSessions GameSession[]
 }
 
 model GamePlayer {
