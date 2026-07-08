@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import { createGame, type GameMode } from "@/lib/games";
 import { getClientKey, isRateLimited } from "@/lib/rateLimit";
 
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
   const hostName = typeof name === "string" ? name.slice(0, 40) : "";
   const gameMode: GameMode = mode === "party" ? "party" : "regular";
 
-  const { code, playerId } = await createGame(hostName, gameMode);
+  const session = await auth();
+  const { code, playerId } = await createGame(hostName, gameMode, session?.user?.id);
   return Response.json({ code, playerId, seat: 1 }, { status: 201 });
 }

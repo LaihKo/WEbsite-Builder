@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/google";
+import Link from "next/link";
 import { AuthStatus } from "@/components/AuthStatus";
 import "./globals.css";
 
@@ -36,7 +37,10 @@ export default function RootLayout({
       className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="flex items-center justify-end border-b border-border px-6 py-3">
+        <header className="flex items-center justify-end gap-4 border-b border-border px-6 py-3 text-sm">
+          <Link href="/achievements" className="text-accent hover:underline">
+            Bedrifter
+          </Link>
           <AuthStatus />
         </header>
         {children}

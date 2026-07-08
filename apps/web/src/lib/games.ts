@@ -1,6 +1,7 @@
 import type { Answer, PublicQuestion, Quiz } from "@quiz/core";
 import { scoreQuiz, toPublicQuiz } from "@quiz/core";
 import { prisma } from "./db";
+import { recordAnswerEvent, recordGameCompletion, type GameContext } from "./achievements";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I to avoid ambiguity
 const CODE_LENGTH = 5;
@@ -206,13 +207,14 @@ function fetchSessionWithPlayers(code: string) {
 export async function createGame(
   hostName: string,
   mode: GameMode = "regular",
+  hostUserId?: string,
 ): Promise<{ code: string; playerId: string }> {
   const code = await generateUniqueGameCode();
   const session = await prisma.gameSession.create({
     data: {
       code,
       mode,
-      players: { create: [{ seat: 1, name: hostName.trim() || "Player 1" }] },
+      players: { create: [{ seat: 1, name: hostName.trim() || "Player 1", userId: hostUserId }] },
     },
     include: { players: true },
   });
@@ -223,7 +225,7 @@ export type JoinGameResult =
   | { ok: true; playerId: string; seat: number }
   | { ok: false; error: "not_found" | "already_started" | "full" | "seat_conflict" };
 
-export async function joinGame(code: string, name: string): Promise<JoinGameResult> {
+export async function joinGame(code: string, name: string, userId?: string): Promise<JoinGameResult> {
   const session = await prisma.gameSession.findUnique({ where: { code }, include: { players: true } });
   if (!session) return { ok: false, error: "not_found" };
   if (session.status !== "lobby") return { ok: false, error: "already_started" };
@@ -236,7 +238,7 @@ export async function joinGame(code: string, name: string): Promise<JoinGameResu
 
   try {
     const player = await prisma.gamePlayer.create({
-      data: { sessionId: session.id, seat, name: name.trim() || `Player ${seat}` },
+      data: { sessionId: session.id, seat, name: name.trim() || `Player ${seat}`, userId },
     });
     return { ok: true, playerId: player.id, seat };
   } catch {
@@ -377,6 +379,21 @@ export async function submitAnswer(
     where: { id: playerId },
     data: { answers: updatedAnswers as object },
   });
+
+  const question = await prisma.question.findUnique({
+    where: { id: questionId },
+    select: { tags: true, correctOptionId: true },
+  });
+  if (question) {
+    await recordAnswerEvent({
+      userId: player.userId,
+      mode: session.mode as GameMode,
+      gameKey: session.id,
+      tags: question.tags,
+      correct: question.correctOptionId === selectedOptionId,
+      timeTakenMs: session.questionStartedAt ? Date.now() - session.questionStartedAt.getTime() : null,
+    });
+  }
 
   // Re-read after writing rather than reusing the snapshot fetched at the
   // top of this call — see castVote for why (two answers landing close
@@ -530,6 +547,28 @@ export async function submitChallengeAnswer(
   return { ok: true };
 }
 
+/** Builds the achievement event's game snapshot — every player's final score/accuracy plus who won. */
+async function buildGameContext(session: SessionWithPlayers, winnerSeats: number[]): Promise<GameContext> {
+  const quiz = await buildQuizFromQuestionIds(session.id, session.questionIds);
+  return {
+    gameKey: session.id,
+    mode: session.mode as GameMode,
+    usedTags: session.usedTags,
+    winnerSeats,
+    players: session.players.map((p) => {
+      const answers = (p.answers as unknown as Answer[]) ?? [];
+      const scored = scoreQuiz(quiz, answers);
+      return {
+        seat: p.seat,
+        userId: p.userId,
+        score: scored.scorePoints + p.bonusPoints,
+        correctCount: scored.correctCount,
+        totalQuestions: quiz.questions.length,
+      };
+    }),
+  };
+}
+
 async function finalizeGame(session: SessionWithPlayers): Promise<void> {
   const quiz = await buildQuizFromQuestionIds(session.id, session.questionIds);
   const scoreBySeat = new Map(
@@ -544,10 +583,11 @@ async function finalizeGame(session: SessionWithPlayers): Promise<void> {
     .map(([seat]) => seat);
 
   if (topSeats.length === 1) {
-    await prisma.gameSession.updateMany({
+    const result = await prisma.gameSession.updateMany({
       where: { id: session.id, status: "round-summary" },
       data: { status: "completed", winnerSeats: topSeats },
     });
+    if (result.count > 0) await recordGameCompletion(await buildGameContext(session, topSeats));
     return;
   }
 
@@ -556,10 +596,11 @@ async function finalizeGame(session: SessionWithPlayers): Promise<void> {
     // No tiebreaker content configured — fall back to a random pick among
     // the tied players rather than leaving the game stuck with no winner.
     const winner = topSeats[Math.floor(Math.random() * topSeats.length)];
-    await prisma.gameSession.updateMany({
+    const result = await prisma.gameSession.updateMany({
       where: { id: session.id, status: "round-summary" },
       data: { status: "completed", winnerSeats: [winner] },
     });
+    if (result.count > 0) await recordGameCompletion(await buildGameContext(session, [winner]));
     return;
   }
 
@@ -593,10 +634,11 @@ async function resolveTiebreak(session: SessionWithPlayers): Promise<void> {
     }, answeredSeats[0]);
   }
 
-  await prisma.gameSession.updateMany({
+  const result = await prisma.gameSession.updateMany({
     where: { id: session.id, status: "tiebreak" },
     data: { status: "completed", winnerSeats: [winnerSeat] },
   });
+  if (result.count > 0) await recordGameCompletion(await buildGameContext(session, [winnerSeat]));
 }
 
 export async function submitTiebreakAnswer(code: string, playerId: string, guess: number): Promise<ActionResult> {
